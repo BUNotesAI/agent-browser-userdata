@@ -899,17 +899,15 @@ agent-browser window - Manage browser windows
 
 Usage: agent-browser window <operation>
 
-Manage browser windows.
+Note: window operations are not supported in persistent context mode.
+Use 'tab new' to open additional pages in the same context.
 
 Operations:
-  new                  Open new browser window
+  new                  Open new browser window (not supported)
 
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
-
-Examples:
-  agent-browser window new
 "##,
 
         // === Frame ===

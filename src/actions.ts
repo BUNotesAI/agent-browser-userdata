@@ -1,4 +1,4 @@
-import type { Page, Frame } from 'playwright-core';
+import type { Page, Frame } from 'patchright-core';
 import type { BrowserManager, ScreencastFrame } from './browser.js';
 import type {
   Command,
@@ -133,7 +133,7 @@ interface SnapshotData {
 }
 
 /**
- * Convert Playwright errors to AI-friendly messages
+ * Convert Patchright errors to AI-friendly messages
  * @internal Exported for testing
  */
 export function toAIFriendlyError(error: unknown, selector: string): Error {
@@ -743,7 +743,7 @@ async function handleWindowNew(
   return successResponse(command.id, result);
 }
 
-// New handlers for enhanced Playwright parity
+// New handlers for enhanced Patchright parity
 
 async function handleFill(command: FillCommand, browser: BrowserManager): Promise<Response> {
   const locator = browser.getLocator(command.selector);
@@ -1313,11 +1313,17 @@ async function handleStateLoad(
 async function handleConsole(command: ConsoleCommand, browser: BrowserManager): Promise<Response> {
   if (command.clear) {
     browser.clearConsoleMessages();
-    return successResponse(command.id, { cleared: true });
+    return successResponse(command.id, {
+      cleared: true,
+      note: 'Console messages are unavailable when using Patchright.',
+    });
   }
 
   const messages = browser.getConsoleMessages();
-  return successResponse(command.id, { messages });
+  return successResponse(command.id, {
+    messages,
+    note: 'Console messages are unavailable when using Patchright.',
+  });
 }
 
 async function handleErrors(command: ErrorsCommand, browser: BrowserManager): Promise<Response> {

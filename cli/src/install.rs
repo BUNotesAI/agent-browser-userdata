@@ -122,7 +122,7 @@ pub fn run_install(with_deps: bool) {
         } else {
             println!("\x1b[33m⚠\x1b[0m Linux detected. If browser fails to launch, run:");
             println!("  agent-browser install --with-deps");
-            println!("  or: npx playwright install-deps chromium");
+            println!("  or: npx patchright install --with-deps chromium");
             println!();
         }
     }
@@ -134,12 +134,12 @@ pub fn run_install(with_deps: bool) {
     // Pass the entire command as a single string to /c to handle paths with spaces.
     #[cfg(windows)]
     let status = Command::new("cmd")
-        .args(["/c", "npx playwright install chromium"])
+        .args(["/c", "npx patchright install chromium"])
         .status();
     
     #[cfg(not(windows))]
     let status = Command::new("npx")
-        .args(["playwright", "install", "chromium"])
+        .args(["patchright", "install", "chromium"])
         .status();
 
     match status {

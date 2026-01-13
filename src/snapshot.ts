@@ -17,7 +17,7 @@
  *   agent-browser click @e2             # Click element by ref
  */
 
-import type { Page, Locator } from 'playwright-core';
+import type { Page, Locator } from 'patchright-core';
 
 export interface RefMap {
   [ref: string]: {
@@ -146,7 +146,7 @@ export async function getEnhancedSnapshot(
   resetRefs();
   const refs: RefMap = {};
 
-  // Get ARIA snapshot from Playwright
+  // Get ARIA snapshot from Patchright
   const locator = options.selector ? page.locator(options.selector) : page.locator(':root');
   const ariaTree = await locator.ariaSnapshot();
 

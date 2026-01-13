@@ -30,7 +30,7 @@ const packageJson = JSON.parse(
 const version = packageJson.version;
 
 // GitHub release URL
-const GITHUB_REPO = 'anthropics/agent-browser'; // Update this to your actual repo
+const GITHUB_REPO = 'BUNotesAI/agent-browser-userdata';
 const DOWNLOAD_URL = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${binaryName}`;
 
 async function downloadFile(url, dest) {
@@ -98,16 +98,16 @@ async function main() {
     console.log('  2. Run: npm run build:native');
   }
 
-  // Reminder about Playwright browsers
+  // Reminder about Patchright browsers
   console.log('');
   console.log('╔═══════════════════════════════════════════════════════════════════════════╗');
   console.log('║ To download browser binaries, run:                                        ║');
   console.log('║                                                                           ║');
-  console.log('║     npx playwright install chromium                                       ║');
+  console.log('║     npx patchright install chromium                                       ║');
   console.log('║                                                                           ║');
   console.log('║ On Linux, include system dependencies with:                               ║');
   console.log('║                                                                           ║');
-  console.log('║     npx playwright install --with-deps chromium                           ║');
+  console.log('║     npx patchright install --with-deps chromium                           ║');
   console.log('║                                                                           ║');
   console.log('╚═══════════════════════════════════════════════════════════════════════════╝');
 }

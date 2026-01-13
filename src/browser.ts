@@ -1,7 +1,5 @@
 import {
   chromium,
-  firefox,
-  webkit,
   devices,
   type Browser,
   type BrowserContext,
@@ -12,7 +10,7 @@ import {
   type Route,
   type Locator,
   type CDPSession,
-} from 'playwright-core';
+} from 'patchright-core';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -64,7 +62,7 @@ interface PageError {
 }
 
 /**
- * Manages the Playwright browser lifecycle with multiple tabs/windows
+ * Manages the Patchright browser lifecycle with multiple tabs/windows
  */
 export class BrowserManager {
   private browser: Browser | null = null;
@@ -680,13 +678,12 @@ export class BrowserManager {
       return;
     }
 
+    // Select browser type (Patchright supports Chromium only)
     const browserType = options.browser ?? 'chromium';
-    if (hasExtensions && browserType !== 'chromium') {
-      throw new Error('Extensions are only supported in Chromium');
+    if (browserType !== 'chromium') {
+      throw new Error(`Unsupported browser: ${browserType}. Patchright supports Chromium only.`);
     }
-
-    const launcher =
-      browserType === 'firefox' ? firefox : browserType === 'webkit' ? webkit : chromium;
+    const launcher = chromium;
     const viewport = options.viewport ?? { width: 1280, height: 720 };
 
     // Resolve userDataDir - use default if not provided
@@ -695,7 +692,7 @@ export class BrowserManager {
     // Ensure directory exists (mkdir -p)
     await this.ensureDirectoryExists(userDataDir);
 
-    // Fix for macOS: Playwright's 'chrome' channel often launches "Chrome for Testing".
+    // Fix for macOS: Patchright's 'chrome' channel can launch "Chrome for Testing".
     // If the user requests 'chrome' on macOS and doesn't specify an executable path,
     // we attempt to resolve the system Chrome path to ensure the authentic Google Chrome is used.
     let executablePath = options.executablePath;
@@ -705,7 +702,7 @@ export class BrowserManager {
         await fs.access(systemChromePath);
         executablePath = systemChromePath;
       } catch {
-        // Fallback to Playwright's default behavior if system Chrome is not found
+        // Fallback to default behavior if system Chrome is not found
       }
     }
 
@@ -746,7 +743,7 @@ export class BrowserManager {
       await context.addInitScript(script);
     }
 
-    // Set default timeout to 10 seconds (Playwright default is 30s)
+    // Set default timeout to 10 seconds (default is 30s)
     context.setDefaultTimeout(10000);
 
     // Set extra HTTP headers if provided

@@ -29,7 +29,7 @@ On Linux, install system dependencies:
 
 ```bash
 agent-browser install --with-deps
-# or manually: npx playwright install-deps chromium
+# or manually: npx patchright install --with-deps chromium
 ```
 
 ## Quick Start
@@ -225,6 +225,8 @@ agent-browser state save <path>       # Save auth state
 agent-browser state load <path>       # Load auth state
 ```
 
+Note: Console logs are unavailable when using Patchright.
+
 ### Navigation
 
 ```bash
@@ -394,7 +396,7 @@ This opens a visible browser window instead of running headless.
 
 ## Google Login (OAuth)
 
-Google blocks Playwright's bundled "Chrome for Testing" browser. Use `--channel chrome` to launch your system Chrome instead:
+Google blocks bundled "Chrome for Testing" browsers. Use `--channel chrome` to launch your system Chrome instead:
 
 ```bash
 # First time: login with system Chrome (headed mode required)
@@ -607,12 +609,12 @@ await browser.stopScreencast();
 agent-browser uses a client-daemon architecture:
 
 1. **Rust CLI** (fast native binary) - Parses commands, communicates with daemon
-2. **Node.js Daemon** - Manages Playwright browser instance
+2. **Node.js Daemon** - Manages Patchright browser instance
 3. **Fallback** - If native binary unavailable, uses Node.js directly
 
 The daemon starts automatically on first command and persists between commands for fast subsequent operations.
 
-**Browser Engine:** Uses Chromium by default. The daemon also supports Firefox and WebKit via the Playwright protocol.
+**Browser Engine:** Uses Chromium only.
 
 ## Platforms
 

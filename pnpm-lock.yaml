@@ -8,8 +8,8 @@ importers:
 
   .:
     dependencies:
-      playwright-core:
-        specifier: ^1.57.0
+      patchright-core:
+        specifier: latest
         version: 1.57.0
       ws:
         specifier: ^8.19.0
@@ -30,8 +30,8 @@ importers:
       lint-staged:
         specifier: ^15.2.11
         version: 15.5.2
-      playwright:
-        specifier: ^1.57.0
+      patchright:
+        specifier: latest
         version: 1.57.0
       prettier:
         specifier: ^3.7.4
@@ -584,6 +584,16 @@ packages:
     resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
     engines: {node: '>=18'}
 
+  patchright-core@1.57.0:
+    resolution: {integrity: sha512-um/9Wue7IFAa9UDLacjNgDn62ub5GJe1b1qouvYpELIF9rsFVMNhRo/rRXYajupLwp5xKJ0sSjOV6sw8/HarBQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  patchright@1.57.0:
+    resolution: {integrity: sha512-pxbI/D65QiFuCY3qUXKQONRhplR3rkYFhry5ieimEbzLNxu/xfOYizQRyuMgc6F5ZoZ37QNIwZz9PWEfn6aC1Q==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
     engines: {node: '>=8'}
@@ -609,16 +619,6 @@ packages:
   pidtree@0.6.0:
     resolution: {integrity: sha512-eG2dWTVw5bzqGRztnHExczNxt5VGsE6OwTeCG3fdUf9KBsZzO3R5OIIIzWR+iZA0NtZ+RDVdaoE2dK1cn6jH4g==}
     engines: {node: '>=0.10'}
-    hasBin: true
-
-  playwright-core@1.57.0:
-    resolution: {integrity: sha512-agTcKlMw/mjBWOnD6kFZttAAGHgi/Nw0CZ2o6JqWSbMlI219lAFLZZCyqByTsvVAJq5XA5H8cA6PrvBRpBWEuQ==}
-    engines: {node: '>=18'}
-    hasBin: true
-
-  playwright@1.57.0:
-    resolution: {integrity: sha512-ilYQj1s8sr2ppEJ2YVadYBN0Mb3mdo9J0wQ+UuDhzYqURwSoW4n1Xs5vs7ORwgDGmyEh33tRMeS8KhdkMoLXQw==}
-    engines: {node: '>=18'}
     hasBin: true
 
   postcss@8.5.6:
@@ -1250,6 +1250,14 @@ snapshots:
     dependencies:
       mimic-function: 5.0.1
 
+  patchright-core@1.57.0: {}
+
+  patchright@1.57.0:
+    dependencies:
+      patchright-core: 1.57.0
+    optionalDependencies:
+      fsevents: 2.3.2
+
   path-key@3.1.1: {}
 
   path-key@4.0.0: {}
@@ -1263,14 +1271,6 @@ snapshots:
   picomatch@4.0.3: {}
 
   pidtree@0.6.0: {}
-
-  playwright-core@1.57.0: {}
-
-  playwright@1.57.0:
-    dependencies:
-      playwright-core: 1.57.0
-    optionalDependencies:
-      fsevents: 2.3.2
 
   postcss@8.5.6:
     dependencies:

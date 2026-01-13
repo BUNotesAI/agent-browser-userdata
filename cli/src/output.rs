@@ -960,7 +960,7 @@ agent-browser trace - Record execution trace
 
 Usage: agent-browser trace <operation> [path]
 
-Record a trace for debugging with Playwright Trace Viewer.
+Record a trace for debugging with Trace Viewer.
 
 Operations:
   start [path]         Start recording trace
@@ -987,6 +987,9 @@ View browser console output (log, warn, error, info).
 
 Options:
   --clear              Clear console log buffer
+
+Note:
+  Console logs are unavailable when using Patchright.
 
 Global Options:
   --json               Output as JSON

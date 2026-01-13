@@ -1,4 +1,4 @@
-import type { Page, Browser, BrowserContext } from 'playwright-core';
+import type { Page, Browser, BrowserContext } from 'patchright-core';
 
 // Base command structure
 export interface BaseCommand {
@@ -11,7 +11,7 @@ export interface LaunchCommand extends BaseCommand {
   action: 'launch';
   headless?: boolean;
   viewport?: { width: number; height: number };
-  browser?: 'chromium' | 'firefox' | 'webkit';
+  browser?: 'chromium';
   headers?: Record<string, string>;
   executablePath?: string;
   cdpPort?: number;

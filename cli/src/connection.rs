@@ -164,6 +164,7 @@ pub fn ensure_daemon(
     headed: bool,
     executable_path: Option<&str>,
     extensions: &[String],
+    channel: Option<&str>,
 ) -> Result<DaemonResult, String> {
     if is_daemon_running(session) && daemon_ready(session) {
         return Ok(DaemonResult {
@@ -207,6 +208,10 @@ pub fn ensure_daemon(
             cmd.env("AGENT_BROWSER_EXTENSIONS", extensions.join(","));
         }
 
+        if let Some(ch) = channel {
+            cmd.env("AGENT_BROWSER_CHANNEL", ch);
+        }
+
         // Create new process group and session to fully detach
         unsafe {
             cmd.pre_exec(|| {
@@ -247,6 +252,10 @@ pub fn ensure_daemon(
 
         if !extensions.is_empty() {
             cmd.env("AGENT_BROWSER_EXTENSIONS", extensions.join(","));
+        }
+
+        if let Some(ch) = channel {
+            cmd.env("AGENT_BROWSER_CHANNEL", ch);
         }
 
         // CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS

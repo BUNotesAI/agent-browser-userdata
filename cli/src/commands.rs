@@ -903,6 +903,7 @@ mod tests {
             executable_path: None,
             extensions: Vec::new(),
             cdp: None,
+            channel: None,
         }
     }
 

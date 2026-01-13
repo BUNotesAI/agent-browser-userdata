@@ -149,7 +149,7 @@ fn main() {
         }
     };
 
-    let daemon_result = match ensure_daemon(&flags.session, flags.headed, flags.executable_path.as_deref(), &flags.extensions) {
+    let daemon_result = match ensure_daemon(&flags.session, flags.headed, flags.executable_path.as_deref(), &flags.extensions, flags.channel.as_deref()) {
         Ok(result) => result,
         Err(e) => {
             if flags.json {
@@ -161,15 +161,16 @@ fn main() {
         }
     };
 
-    // Warn if executable_path was specified but daemon was already running
-    if daemon_result.already_running && (flags.executable_path.is_some() || !flags.extensions.is_empty()) {
-        if !flags.json {
-            if flags.executable_path.is_some() {
-                eprintln!("\x1b[33m⚠\x1b[0m --executable-path ignored: daemon already running. Use 'agent-browser close' first to restart with new path.");
-            }
-            if !flags.extensions.is_empty() {
-                eprintln!("\x1b[33m⚠\x1b[0m --extension ignored: daemon already running. Use 'agent-browser close' first to restart with extensions.");
-            }
+    // Warn if executable_path, extensions, or channel was specified but daemon was already running
+    if daemon_result.already_running && !flags.json {
+        if flags.executable_path.is_some() {
+            eprintln!("\x1b[33m⚠\x1b[0m --executable-path ignored: daemon already running. Use 'agent-browser close' first to restart with new path.");
+        }
+        if !flags.extensions.is_empty() {
+            eprintln!("\x1b[33m⚠\x1b[0m --extension ignored: daemon already running. Use 'agent-browser close' first to restart with extensions.");
+        }
+        if flags.channel.is_some() {
+            eprintln!("\x1b[33m⚠\x1b[0m --channel ignored: daemon already running. Use 'agent-browser close' first to restart with new channel.");
         }
     }
 
@@ -230,12 +231,17 @@ fn main() {
 
     // Launch headed browser if --headed flag is set (without CDP)
     if flags.headed && flags.cdp.is_none() {
-        let launch_cmd = json!({
+        let mut launch_cmd = json!({
             "id": gen_id(),
             "action": "launch",
             "headless": false
         });
-
+        if let Some(ch) = &flags.channel {
+            launch_cmd["channel"] = json!(ch);
+        }
+        if let Some(path) = &flags.executable_path {
+            launch_cmd["executablePath"] = json!(path);
+        }
         if let Err(e) = send_command(launch_cmd, &flags.session) {
             if !flags.json {
                 eprintln!("\x1b[33m⚠\x1b[0m Could not launch headed browser: {}", e);

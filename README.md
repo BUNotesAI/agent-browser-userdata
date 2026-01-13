@@ -541,6 +541,20 @@ curl -o .claude/skills/agent-browser/SKILL.md \
   https://raw.githubusercontent.com/BUNotesAI/agent-browser-userdata/main/skills/agent-browser/SKILL.md
 ```
 
+## Branches
+
+### Patchright Version
+
+The [`agent-browser-with-userdata-patchright`](https://github.com/BUNotesAI/agent-browser-userdata/tree/agent-browser-with-userdata-patchright) branch replaces Playwright with [Patchright](https://github.com/AhmedMostafa16/patchright) - a patched version of Playwright that helps bypass bot detection. Use this branch if you're encountering issues with websites that block automation.
+
+```bash
+# Install from patchright branch
+git clone -b agent-browser-with-userdata-patchright https://github.com/BUNotesAI/agent-browser-userdata
+cd agent-browser-userdata
+pnpm install
+pnpm build
+```
+
 ## License
 
 Apache-2.0

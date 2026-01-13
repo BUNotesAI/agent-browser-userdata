@@ -1,0 +1,475 @@
+From ca9145bc8f4428c9bf545189ac81e7db067675dd Mon Sep 17 00:00:00 2001
+From: Alex Wang <idea.wangtj@gmail.com>
+Date: Tue, 13 Jan 2026 15:38:46 +0800
+Subject: [PATCH 1/4] feat: add --channel flag for system Chrome support
+
+- Add channel option to LaunchCommand type and protocol schema
+- Implement macOS system Chrome path detection when channel=chrome
+- Add stealth scripts to bypass automation detection
+- Use launchPersistentContext for automatic state persistence
+- CLI passes AGENT_BROWSER_CHANNEL env to daemon
+- Include channel in launch command when --headed flag is set
+
+This enables Google login by using system Chrome instead of
+Playwright's bundled "Chrome for Testing" which Google blocks.
+
+Usage: agent-browser --channel chrome --headed open https://accounts.google.com
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+---
+ cli/src/commands.rs   |   1 +
+ cli/src/connection.rs |  10 +++-
+ cli/src/flags.rs      |  36 +++++++++++-
+ cli/src/main.rs       |  19 +++++--
+ src/browser.ts        | 125 +++++++++++++++++++++++++++---------------
+ src/daemon.ts         |   3 +-
+ src/protocol.ts       |   4 ++
+ src/stealth.ts        |  26 +++++++++
+ src/types.ts          |   2 +
+ 9 files changed, 175 insertions(+), 51 deletions(-)
+ create mode 100644 src/stealth.ts
+
+diff --git a/cli/src/commands.rs b/cli/src/commands.rs
+index 0e9dace..debaac0 100644
+--- a/cli/src/commands.rs
++++ b/cli/src/commands.rs
+@@ -901,6 +901,7 @@ mod tests {
+             debug: false,
+             headers: None,
+             executable_path: None,
++            channel: None,
+         }
+     }
+ 
+diff --git a/cli/src/connection.rs b/cli/src/connection.rs
+index 7a103ec..d80d325 100644
+--- a/cli/src/connection.rs
++++ b/cli/src/connection.rs
+@@ -159,7 +159,7 @@ pub struct DaemonResult {
+     pub already_running: bool,
+ }
+ 
+-pub fn ensure_daemon(session: &str, headed: bool, executable_path: Option<&str>) -> Result<DaemonResult, String> {
++pub fn ensure_daemon(session: &str, headed: bool, executable_path: Option<&str>, channel: Option<&str>) -> Result<DaemonResult, String> {
+     if is_daemon_running(session) && daemon_ready(session) {
+         return Ok(DaemonResult { already_running: true });
+     }
+@@ -196,6 +196,10 @@ pub fn ensure_daemon(session: &str, headed: bool, executable_path: Option<&str>)
+             cmd.env("AGENT_BROWSER_EXECUTABLE_PATH", path);
+         }
+ 
++        if let Some(ch) = channel {
++            cmd.env("AGENT_BROWSER_CHANNEL", ch);
++        }
++
+         // Create new process group and session to fully detach
+         unsafe {
+             cmd.pre_exec(|| {
+@@ -234,6 +238,10 @@ pub fn ensure_daemon(session: &str, headed: bool, executable_path: Option<&str>)
+             cmd.env("AGENT_BROWSER_EXECUTABLE_PATH", path);
+         }
+ 
++        if let Some(ch) = channel {
++            cmd.env("AGENT_BROWSER_CHANNEL", ch);
++        }
++
+         // CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
+         const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+         const DETACHED_PROCESS: u32 = 0x00000008;
+diff --git a/cli/src/flags.rs b/cli/src/flags.rs
+index 3882cda..f7e8b01 100644
+--- a/cli/src/flags.rs
++++ b/cli/src/flags.rs
+@@ -8,6 +8,7 @@ pub struct Flags {
+     pub session: String,
+     pub headers: Option<String>,
+     pub executable_path: Option<String>,
++    pub channel: Option<String>,
+ }
+ 
+ pub fn parse_flags(args: &[String]) -> Flags {
+@@ -19,6 +20,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
+         session: env::var("AGENT_BROWSER_SESSION").unwrap_or_else(|_| "default".to_string()),
+         headers: None,
+         executable_path: env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
++        channel: env::var("AGENT_BROWSER_CHANNEL").ok(),
+     };
+ 
+     let mut i = 0;
+@@ -46,6 +48,12 @@ pub fn parse_flags(args: &[String]) -> Flags {
+                     i += 1;
+                 }
+             }
++            "--channel" => {
++                if let Some(c) = args.get(i + 1) {
++                    flags.channel = Some(c.clone());
++                    i += 1;
++                }
++            }
+             _ => {}
+         }
+         i += 1;
+@@ -60,7 +68,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
+     // Global flags that should be stripped from command args
+     const GLOBAL_FLAGS: &[&str] = &["--json", "--full", "--headed", "--debug"];
+     // Global flags that take a value (need to skip the next arg too)
+-    const GLOBAL_FLAGS_WITH_VALUE: &[&str] = &["--session", "--headers", "--executable-path"];
++    const GLOBAL_FLAGS_WITH_VALUE: &[&str] = &["--session", "--headers", "--executable-path", "--channel"];
+ 
+     for arg in args.iter() {
+         if skip_next {
+@@ -186,4 +194,30 @@ mod tests {
+         assert_eq!(flags.session, "test");
+         assert_eq!(flags.executable_path, Some("/custom/chrome".to_string()));
+     }
++
++    #[test]
++    fn test_parse_channel_flag() {
++        let flags = parse_flags(&args("--channel chrome open example.com"));
++        assert_eq!(flags.channel, Some("chrome".to_string()));
++    }
++
++    #[test]
++    fn test_parse_channel_flag_no_value() {
++        let flags = parse_flags(&args("--channel"));
++        assert_eq!(flags.channel, None);
++    }
++
++    #[test]
++    fn test_clean_args_removes_channel() {
++        let cleaned = clean_args(&args("--channel chrome open example.com"));
++        assert_eq!(cleaned, vec!["open", "example.com"]);
++    }
++
++    #[test]
++    fn test_parse_channel_with_other_flags() {
++        let flags = parse_flags(&args("--channel chrome --headed --json open example.com"));
++        assert_eq!(flags.channel, Some("chrome".to_string()));
++        assert!(flags.headed);
++        assert!(flags.json);
++    }
+ }
+diff --git a/cli/src/main.rs b/cli/src/main.rs
+index 0413d3b..10aea57 100644
+--- a/cli/src/main.rs
++++ b/cli/src/main.rs
+@@ -149,7 +149,7 @@ fn main() {
+         }
+     };
+ 
+-    let daemon_result = match ensure_daemon(&flags.session, flags.headed, flags.executable_path.as_deref()) {
++    let daemon_result = match ensure_daemon(&flags.session, flags.headed, flags.executable_path.as_deref(), flags.channel.as_deref()) {
+         Ok(result) => result,
+         Err(e) => {
+             if flags.json {
+@@ -161,16 +161,25 @@ fn main() {
+         }
+     };
+ 
+-    // Warn if executable_path was specified but daemon was already running
+-    if daemon_result.already_running && flags.executable_path.is_some() {
+-        if !flags.json {
++    // Warn if executable_path or channel was specified but daemon was already running
++    if daemon_result.already_running {
++        if flags.executable_path.is_some() && !flags.json {
+             eprintln!("\x1b[33m⚠\x1b[0m --executable-path ignored: daemon already running. Use 'agent-browser close' first to restart with new path.");
+         }
++        if flags.channel.is_some() && !flags.json {
++            eprintln!("\x1b[33m⚠\x1b[0m --channel ignored: daemon already running. Use 'agent-browser close' first to restart with new channel.");
++        }
+     }
+ 
+     // If --headed flag is set, send launch command first to switch to headed mode
+     if flags.headed {
+-        let launch_cmd = json!({ "id": gen_id(), "action": "launch", "headless": false });
++        let mut launch_cmd = json!({ "id": gen_id(), "action": "launch", "headless": false });
++        if let Some(ch) = &flags.channel {
++            launch_cmd["channel"] = json!(ch);
++        }
++        if let Some(path) = &flags.executable_path {
++            launch_cmd["executablePath"] = json!(path);
++        }
+         if let Err(e) = send_command(launch_cmd, &flags.session) {
+             if !flags.json {
+                 eprintln!("\x1b[33m⚠\x1b[0m Could not switch to headed mode: {}", e);
+diff --git a/src/browser.ts b/src/browser.ts
+index 75fd241..e44db49 100644
+--- a/src/browser.ts
++++ b/src/browser.ts
+@@ -12,6 +12,10 @@ import {
+   type Route,
+   type Locator,
+ } from 'playwright-core';
++import * as fs from 'fs/promises';
++import * as path from 'path';
++import * as os from 'os';
++import { stealthScripts } from './stealth.js';
+ import type { LaunchCommand } from './types.js';
+ import { type RefMap, type EnhancedSnapshot, getEnhancedSnapshot, parseRef } from './snapshot.js';
+ 
+@@ -39,6 +43,7 @@ interface PageError {
+  */
+ export class BrowserManager {
+   private browser: Browser | null = null;
++  private persistentContext: BrowserContext | null = null;
+   private contexts: BrowserContext[] = [];
+   private pages: Page[] = [];
+   private activePageIndex: number = 0;
+@@ -57,7 +62,22 @@ export class BrowserManager {
+    * Check if browser is launched
+    */
+   isLaunched(): boolean {
+-    return this.browser !== null;
++    return this.persistentContext !== null;
++  }
++
++  /**
++   * Get the default userDataDir path
++   */
++  private getDefaultUserDataDir(): string {
++    const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
++    return path.join(home, 'tmp', 'agent-browser');
++  }
++
++  /**
++   * Ensure directory exists (mkdir -p equivalent)
++   */
++  private async ensureDirectoryExists(dir: string): Promise<void> {
++    await fs.mkdir(dir, { recursive: true });
+   }
+ 
+   /**
+@@ -575,11 +595,11 @@ export class BrowserManager {
+ 
+   /**
+    * Launch the browser with the specified options
+-   * If already launched, this is a no-op (browser stays open)
++   * Uses launchPersistentContext for automatic state persistence
+    */
+   async launch(options: LaunchCommand): Promise<void> {
+     // If already launched, don't relaunch
+-    if (this.browser) {
++    if (this.persistentContext) {
+       return;
+     }
+ 
+@@ -588,26 +608,61 @@ export class BrowserManager {
+     const launcher =
+       browserType === 'firefox' ? firefox : browserType === 'webkit' ? webkit : chromium;
+ 
+-    // Launch browser
+-    this.browser = await launcher.launch({
+-      headless: options.headless ?? true,
+-      executablePath: options.executablePath,
+-    });
++    // Resolve userDataDir - use default if not provided
++    const userDataDir = options.userDataDir ?? this.getDefaultUserDataDir();
++
++    // Ensure directory exists (mkdir -p)
++    await this.ensureDirectoryExists(userDataDir);
+ 
+-    // Create context with viewport and optional headers
+-    const context = await this.browser.newContext({
++    // Fix for macOS: Playwright's 'chrome' channel often launches "Chrome for Testing".
++    // If the user requests 'chrome' on macOS and doesn't specify an executable path,
++    // we attempt to resolve the system Chrome path to ensure the authentic Google Chrome is used.
++    let executablePath = options.executablePath;
++    if (os.platform() === 'darwin' && options.channel === 'chrome' && !executablePath) {
++      const systemChromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
++      try {
++        await fs.access(systemChromePath);
++        executablePath = systemChromePath;
++      } catch {
++        // Fallback to Playwright's default behavior if system Chrome is not found
++      }
++    }
++
++    // Launch persistent context (replaces launch + newContext)
++    // Note: When executablePath is set, don't pass channel to avoid Playwright prioritizing channel
++    const context = await launcher.launchPersistentContext(userDataDir, {
++      headless: options.headless ?? true,
++      executablePath: executablePath,
++      channel: executablePath ? undefined : options.channel,
+       viewport: options.viewport ?? { width: 1280, height: 720 },
+-      extraHTTPHeaders: options.headers,
++      // Hide "Chrome is being controlled by automated test software" infobar
++      ignoreDefaultArgs: ['--enable-automation'],
++      args: ['--disable-blink-features=AutomationControlled'],
+     });
+ 
++    // Apply stealth scripts
++    for (const script of stealthScripts) {
++      await context.addInitScript(script);
++    }
++
+     // Set default timeout to 10 seconds (Playwright default is 30s)
+     context.setDefaultTimeout(10000);
+ 
+-    this.contexts.push(context);
++    // Set extra HTTP headers if provided
++    if (options.headers) {
++      await context.setExtraHTTPHeaders(options.headers);
++    }
++
++    this.persistentContext = context;
++    this.contexts = [context];
+ 
+-    // Create initial page
++    // Close any existing pages from previous sessions and create a fresh one
++    const existingPages = context.pages();
++    for (const p of existingPages) {
++      await p.close().catch(() => {});
++    }
+     const page = await context.newPage();
+-    this.pages.push(page);
++    this.pages = [page];
+     this.activePageIndex = 0;
+ 
+     // Automatically start console and error tracking
+@@ -638,7 +693,7 @@ export class BrowserManager {
+    * Create a new tab in the current context
+    */
+   async newTab(): Promise<{ index: number; total: number }> {
+-    if (!this.browser || this.contexts.length === 0) {
++    if (!this.persistentContext || this.contexts.length === 0) {
+       throw new Error('Browser not launched');
+     }
+ 
+@@ -654,30 +709,16 @@ export class BrowserManager {
+   }
+ 
+   /**
+-   * Create a new window (new context)
++   * Create a new window (new context) - NOT SUPPORTED in persistent mode
+    */
+-  async newWindow(viewport?: {
++  async newWindow(_viewport?: {
+     width: number;
+     height: number;
+   }): Promise<{ index: number; total: number }> {
+-    if (!this.browser) {
+-      throw new Error('Browser not launched');
+-    }
+-
+-    const context = await this.browser.newContext({
+-      viewport: viewport ?? { width: 1280, height: 720 },
+-    });
+-    context.setDefaultTimeout(10000);
+-    this.contexts.push(context);
+-
+-    const page = await context.newPage();
+-    this.pages.push(page);
+-    this.activePageIndex = this.pages.length - 1;
+-
+-    // Set up tracking for the new page
+-    this.setupPageTracking(page);
+-
+-    return { index: this.activePageIndex, total: this.pages.length };
++    throw new Error(
++      'newWindow() is not supported in persistent context mode. ' +
++        'Use newTab() to open additional pages in the same context.'
++    );
+   }
+ 
+   /**
+@@ -750,16 +791,14 @@ export class BrowserManager {
+     }
+     this.pages = [];
+ 
+-    for (const context of this.contexts) {
+-      await context.close().catch(() => {});
+-    }
+-    this.contexts = [];
+-
+-    if (this.browser) {
+-      await this.browser.close().catch(() => {});
+-      this.browser = null;
++    // Close persistent context (this closes the browser process)
++    if (this.persistentContext) {
++      await this.persistentContext.close().catch(() => {});
++      this.persistentContext = null;
+     }
+ 
++    this.contexts = [];
++    this.browser = null;
+     this.activePageIndex = 0;
+     this.refMap = {};
+     this.lastSnapshot = '';
+diff --git a/src/daemon.ts b/src/daemon.ts
+index 61ecc07..4377e12 100644
+--- a/src/daemon.ts
++++ b/src/daemon.ts
+@@ -161,8 +161,9 @@ export async function startDaemon(): Promise<void> {
+             await browser.launch({
+               id: 'auto',
+               action: 'launch',
+-              headless: true,
++              headless: process.env.AGENT_BROWSER_HEADED !== '1',
+               executablePath: process.env.AGENT_BROWSER_EXECUTABLE_PATH,
++              channel: process.env.AGENT_BROWSER_CHANNEL,
+             });
+           }
+ 
+diff --git a/src/protocol.ts b/src/protocol.ts
+index a2be79f..a2a02a4 100644
+--- a/src/protocol.ts
++++ b/src/protocol.ts
+@@ -18,6 +18,10 @@ const launchSchema = baseCommandSchema.extend({
+     })
+     .optional(),
+   browser: z.enum(['chromium', 'firefox', 'webkit']).optional(),
++  headers: z.record(z.string()).optional(),
++  executablePath: z.string().optional(),
++  userDataDir: z.string().optional(),
++  channel: z.string().optional(),
+ });
+ 
+ const navigateSchema = baseCommandSchema.extend({
+diff --git a/src/stealth.ts b/src/stealth.ts
+new file mode 100644
+index 0000000..5e78b10
+--- /dev/null
++++ b/src/stealth.ts
+@@ -0,0 +1,26 @@
++export const stealthScripts = [
++  // 1. Remove navigator.webdriver - CRITICAL for passing bot detection
++  `
++    Object.defineProperty(navigator, 'webdriver', {
++      get: () => undefined,
++    });
++  `,
++  // 2. Mock window.chrome (if missing or incomplete)
++  `
++    if (!window.chrome) {
++      window.chrome = {};
++    }
++    if (!window.chrome.runtime) {
++      window.chrome.runtime = {};
++    }
++  `,
++  // 3. Mock Permissions (pass-through 'granted' to avoid queries revealing automation)
++  `
++    if (!window.navigator.permissions) {
++      window.navigator.permissions = {};
++    }
++    if (!window.navigator.permissions.query) {
++       window.navigator.permissions.query = (parameters) => Promise.resolve({ state: 'granted' });
++    }
++  `,
++];
+diff --git a/src/types.ts b/src/types.ts
+index baf8408..51793f8 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -14,6 +14,8 @@ export interface LaunchCommand extends BaseCommand {
+   browser?: 'chromium' | 'firefox' | 'webkit';
+   headers?: Record<string, string>;
+   executablePath?: string;
++  userDataDir?: string;
++  channel?: string;
+ }
+ 
+ export interface NavigateCommand extends BaseCommand {
+-- 
+2.39.5 (Apple Git-154)
+

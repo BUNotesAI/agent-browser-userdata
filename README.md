@@ -541,6 +541,45 @@ curl -o .claude/skills/agent-browser/SKILL.md \
   https://raw.githubusercontent.com/BUNotesAI/agent-browser-userdata/main/skills/agent-browser/SKILL.md
 ```
 
+## Patches
+
+This fork maintains patch files in `patches/` for easy reapplication after upstream upgrades:
+
+| Patch | Description |
+|-------|-------------|
+| `0001-feat-add-channel-flag-for-system-Chrome-support.patch` | `--channel` flag for system Chrome |
+| `0002-docs-update-documentation-for-channel-flag-and-windo.patch` | Documentation updates |
+| `0003-docs-update-README-for-fork-and-add-channel-document.patch` | README updates |
+| `0004-docs-add-patchright-branch-documentation.patch` | Patchright branch docs |
+| `0005-migrate-to-patchright.patch` | Migrate Playwright to Patchright |
+
+### Upgrading from Upstream
+
+```bash
+# Add upstream remote (first time only)
+git remote add upstream https://github.com/anthropics/agent-browser.git
+
+# Fetch and rebase onto upstream
+git fetch upstream
+git checkout main
+git rebase upstream/main
+
+# Apply patches
+git am patches/*.patch
+```
+
+### Regenerating Patches
+
+After making changes, regenerate patches from the upstream base:
+
+```bash
+# Find upstream base commit (e.g., v0.4.4)
+git log --oneline | grep -E "^[a-f0-9]+ v[0-9]"
+
+# Export patches (replace BASE_COMMIT with actual commit)
+git format-patch BASE_COMMIT..HEAD -o patches/
+```
+
 ## Branches
 
 ### Patchright Version

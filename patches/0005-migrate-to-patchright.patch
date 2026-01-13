@@ -1,0 +1,563 @@
+From 3b99dc7810073e092876ebbdc945c11d5005c671 Mon Sep 17 00:00:00 2001
+From: Alex Wang <idea.wangtj@gmail.com>
+Date: Tue, 13 Jan 2026 17:53:21 +0800
+Subject: [PATCH] migrate to patchright
+
+---
+ README.md                   |  10 ++--
+ cli/src/install.rs          |   6 +--
+ cli/src/output.rs           |   5 +-
+ doc/patchright-migration.md | 102 ++++++++++++++++++++++++++++++++++++
+ package.json                |   6 +--
+ pnpm-lock.yaml              |  44 ++++++++--------
+ scripts/postinstall.js      |   8 +--
+ src/actions.ts              |  16 ++++--
+ src/browser.ts              |  22 ++++----
+ src/protocol.ts             |   2 +-
+ src/snapshot.ts             |   4 +-
+ src/types.ts                |   4 +-
+ 12 files changed, 171 insertions(+), 58 deletions(-)
+ create mode 100644 doc/patchright-migration.md
+
+diff --git a/README.md b/README.md
+index 1b1da22..5eab797 100644
+--- a/README.md
++++ b/README.md
+@@ -29,7 +29,7 @@ On Linux, install system dependencies:
+ 
+ ```bash
+ agent-browser install --with-deps
+-# or manually: npx playwright install-deps chromium
++# or manually: npx patchright install --with-deps chromium
+ ```
+ 
+ ## Quick Start
+@@ -225,6 +225,8 @@ agent-browser state save <path>       # Save auth state
+ agent-browser state load <path>       # Load auth state
+ ```
+ 
++Note: Console logs are unavailable when using Patchright.
++
+ ### Navigation
+ 
+ ```bash
+@@ -393,7 +395,7 @@ This opens a visible browser window instead of running headless.
+ 
+ ## Google Login (OAuth)
+ 
+-Google blocks Playwright's bundled "Chrome for Testing" browser. Use `--channel chrome` to launch your system Chrome instead:
++Google blocks bundled "Chrome for Testing" browsers. Use `--channel chrome` to launch your system Chrome instead:
+ 
+ ```bash
+ # First time: login with system Chrome (headed mode required)
+@@ -480,12 +482,12 @@ export async function handler() {
+ agent-browser uses a client-daemon architecture:
+ 
+ 1. **Rust CLI** (fast native binary) - Parses commands, communicates with daemon
+-2. **Node.js Daemon** - Manages Playwright browser instance
++2. **Node.js Daemon** - Manages Patchright browser instance
+ 3. **Fallback** - If native binary unavailable, uses Node.js directly
+ 
+ The daemon starts automatically on first command and persists between commands for fast subsequent operations.
+ 
+-**Browser Engine:** Uses Chromium by default. The daemon also supports Firefox and WebKit via the Playwright protocol.
++**Browser Engine:** Uses Chromium only.
+ 
+ ## Platforms
+ 
+diff --git a/cli/src/install.rs b/cli/src/install.rs
+index f92c1fc..6fcb30d 100644
+--- a/cli/src/install.rs
++++ b/cli/src/install.rs
+@@ -122,7 +122,7 @@ pub fn run_install(with_deps: bool) {
+         } else {
+             println!("\x1b[33m⚠\x1b[0m Linux detected. If browser fails to launch, run:");
+             println!("  agent-browser install --with-deps");
+-            println!("  or: npx playwright install-deps chromium");
++            println!("  or: npx patchright install --with-deps chromium");
+             println!();
+         }
+     }
+@@ -134,12 +134,12 @@ pub fn run_install(with_deps: bool) {
+     // Pass the entire command as a single string to /c to handle paths with spaces.
+     #[cfg(windows)]
+     let status = Command::new("cmd")
+-        .args(["/c", "npx playwright install chromium"])
++        .args(["/c", "npx patchright install chromium"])
+         .status();
+     
+     #[cfg(not(windows))]
+     let status = Command::new("npx")
+-        .args(["playwright", "install", "chromium"])
++        .args(["patchright", "install", "chromium"])
+         .status();
+ 
+     match status {
+diff --git a/cli/src/output.rs b/cli/src/output.rs
+index 0cf890b..7c6d180 100644
+--- a/cli/src/output.rs
++++ b/cli/src/output.rs
+@@ -960,7 +960,7 @@ agent-browser trace - Record execution trace
+ 
+ Usage: agent-browser trace <operation> [path]
+ 
+-Record a trace for debugging with Playwright Trace Viewer.
++Record a trace for debugging with Trace Viewer.
+ 
+ Operations:
+   start [path]         Start recording trace
+@@ -988,6 +988,9 @@ View browser console output (log, warn, error, info).
+ Options:
+   --clear              Clear console log buffer
+ 
++Note:
++  Console logs are unavailable when using Patchright.
++
+ Global Options:
+   --json               Output as JSON
+   --session <name>     Use specific session
+diff --git a/doc/patchright-migration.md b/doc/patchright-migration.md
+new file mode 100644
+index 0000000..9e101a7
+--- /dev/null
++++ b/doc/patchright-migration.md
+@@ -0,0 +1,102 @@
++# Patchright Migration Design
++
++## Summary
++This document proposes a full refactor of agent-browser to depend on Patchright instead of Playwright while preserving the current system Chrome + headed login flow that uses a persistent context.
++
++Patchright is a drop-in replacement for Playwright, but it only supports Chromium-based browsers and it disables the Console API to avoid detection. This affects browser selection and console log features.
++
++## Goals
++- Replace Playwright dependencies with Patchright equivalents.
++- Keep the existing system Chrome + headed login flow (channel + persistent context).
++- Maintain API behavior for core navigation and interaction commands.
++- Clearly define degraded or unsupported features under Patchright (console, non-Chromium browsers).
++
++## Non-goals
++- Support Firefox or WebKit after the migration (not supported by Patchright).
++- Provide perfect parity with Playwright console logging (disabled in Patchright).
++
++## Constraints and Key Differences
++- Patchright only patches Chromium-based browsers. Firefox and WebKit are not supported.
++- Patchright disables the Console API, so console event tracking will not work.
++- Patchright recommends using system Chrome with `launchPersistentContext` and `channel: "chrome"`, and recommends not adding custom headers or userAgent for best stealth.
++- Patchright is distributed via the `patchright` npm package and uses `npx patchright install chromium` for browser install.
++
++## Proposed Design
++
++### 1) Dependency and Runtime Strategy
++- Replace runtime dependency `playwright-core` with `patchright-core`.
++- Replace dev dependency `playwright` with `patchright` to keep a CLI installer available for postinstall or docs.
++- Update any install instructions to use `npx patchright install chromium` (or `chrome` if desired).
++
++Rationale: `patchright-core` mirrors the no-browser flavor of Playwright, matching the current architecture that relies on a separate install step.
++
++### 2) Browser Selection and Types
++- Remove `firefox` and `webkit` imports and branching.
++- Update all types and protocol schemas to only allow `chromium`.
++- Update CLI validation to reject `firefox`/`webkit` with a clear error message.
++
++User-facing change:
++- `--browser` (if exposed) should accept only `chromium`. Any other value returns a structured error.
++
++### 3) Console API Behavior
++- `page.on('console')` event tracking will not emit under Patchright.
++- Keep the `console` command but return an empty list and add a message that console logs are unavailable under Patchright.
++- Add a short warning to README and CLI help for `console`.
++
++Optional alternative (not default):
++- Provide an opt-in init script that wraps `console.*` in the page to forward logs to `window.__agentBrowserLogs`, which can be pulled via `evaluate`. This should be documented as less stealthy and potentially detectable.
++
++### 4) Launch Defaults and Stealth Posture
++- Preserve current `launchPersistentContext` flow and `channel: "chrome"` usage, which aligns with Patchright best practices.
++- Do not change default `headless` or `viewport` behavior unless explicitly required; keep existing user-facing options.
++- Add documentation note: custom headers or userAgent may reduce stealth under Patchright.
++
++### 5) Install and Postinstall Flow
++- Replace Playwright install hints in `scripts/postinstall.js`, README, and CLI native installer strings with Patchright equivalents.
++- Example:
++  - Old: `npx playwright install chromium`
++  - New: `npx patchright install chromium`
++
++### 6) Tests and CI
++- Update tests that mention Playwright-specific browser choices.
++- If any tests assert console output, adjust expectations for Patchright mode.
++- Add a simple smoke test that launches chromium via Patchright and opens a page.
++
++## Migration Steps (Implementation Plan)
++1. Dependencies
++   - Update `package.json` dependencies: replace `playwright-core` -> `patchright-core` and `playwright` -> `patchright`.
++2. Core imports and types
++   - Update imports in `src/browser.ts`, `src/actions.ts`, `src/snapshot.ts`, `src/types.ts`.
++   - Remove non-Chromium branches and types.
++3. Protocol and validation
++   - Update `src/protocol.ts` schemas for browser enum.
++4. Console command behavior
++   - Keep `console` endpoint but return empty list + warning string.
++5. Documentation and CLI output
++   - Update README install steps and CLI help strings.
++6. Tests
++   - Adjust or add tests for chromium-only and console unavailability.
++
++## Compatibility Notes
++- Current system Chrome login flow is preserved because Patchright explicitly recommends `launchPersistentContext` with `channel: "chrome"`.
++- Features dependent on console events will degrade.
++- Non-Chromium browsers are no longer supported.
++
++## Risks and Mitigations
++- Version skew vs Playwright: Patchright versions may lag or diverge.
++  - Mitigation: track Patchright release notes and pin versions; add a compatibility smoke test in CI.
++- Console observability loss.
++  - Mitigation: document as unsupported; provide opt-in JS logger in debug mode.
++- Changes to stealth behavior if users set headers or userAgent.
++  - Mitigation: warn in docs and avoid setting headers by default under Patchright.
++
++## Acceptance Criteria
++- agent-browser builds and runs with Patchright dependencies.
++- Chromium launches via Patchright with current channel + persistent context flow.
++- All core commands (navigate, click, type, snapshot, wait, etc.) work as before.
++- Console command returns a clear message that console logs are unavailable under Patchright.
++- Non-Chromium options are rejected with a clear error.
++
++## Open Questions
++- Do we want to keep a dual-mode build (Playwright vs Patchright) for fallback?
++- Should we disable custom headers in Patchright mode by default or keep current behavior with warnings?
+diff --git a/package.json b/package.json
+index 0453749..2b13072 100644
+--- a/package.json
++++ b/package.json
+@@ -38,7 +38,7 @@
+     "browser",
+     "automation",
+     "headless",
+-    "playwright",
++    "patchright",
+     "cli",
+     "agent"
+   ],
+@@ -52,14 +52,14 @@
+   },
+   "homepage": "https://github.com/vercel-labs/agent-browser#readme",
+   "dependencies": {
+-    "playwright-core": "^1.57.0",
++    "patchright-core": "latest",
+     "zod": "^3.22.4"
+   },
+   "devDependencies": {
+     "@types/node": "^20.10.0",
+     "husky": "^9.1.7",
+     "lint-staged": "^15.2.11",
+-    "playwright": "^1.57.0",
++    "patchright": "latest",
+     "prettier": "^3.7.4",
+     "tsx": "^4.6.0",
+     "typescript": "^5.3.0",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 434e3ff..2f07462 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -8,8 +8,8 @@ importers:
+ 
+   .:
+     dependencies:
+-      playwright-core:
+-        specifier: ^1.57.0
++      patchright-core:
++        specifier: latest
+         version: 1.57.0
+       zod:
+         specifier: ^3.22.4
+@@ -24,8 +24,8 @@ importers:
+       lint-staged:
+         specifier: ^15.2.11
+         version: 15.5.2
+-      playwright:
+-        specifier: ^1.57.0
++      patchright:
++        specifier: latest
+         version: 1.57.0
+       prettier:
+         specifier: ^3.7.4
+@@ -575,6 +575,16 @@ packages:
+     resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
+     engines: {node: '>=18'}
+ 
++  patchright-core@1.57.0:
++    resolution: {integrity: sha512-um/9Wue7IFAa9UDLacjNgDn62ub5GJe1b1qouvYpELIF9rsFVMNhRo/rRXYajupLwp5xKJ0sSjOV6sw8/HarBQ==}
++    engines: {node: '>=18'}
++    hasBin: true
++
++  patchright@1.57.0:
++    resolution: {integrity: sha512-pxbI/D65QiFuCY3qUXKQONRhplR3rkYFhry5ieimEbzLNxu/xfOYizQRyuMgc6F5ZoZ37QNIwZz9PWEfn6aC1Q==}
++    engines: {node: '>=18'}
++    hasBin: true
++
+   path-key@3.1.1:
+     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
+     engines: {node: '>=8'}
+@@ -602,16 +612,6 @@ packages:
+     engines: {node: '>=0.10'}
+     hasBin: true
+ 
+-  playwright-core@1.57.0:
+-    resolution: {integrity: sha512-agTcKlMw/mjBWOnD6kFZttAAGHgi/Nw0CZ2o6JqWSbMlI219lAFLZZCyqByTsvVAJq5XA5H8cA6PrvBRpBWEuQ==}
+-    engines: {node: '>=18'}
+-    hasBin: true
+-
+-  playwright@1.57.0:
+-    resolution: {integrity: sha512-ilYQj1s8sr2ppEJ2YVadYBN0Mb3mdo9J0wQ+UuDhzYqURwSoW4n1Xs5vs7ORwgDGmyEh33tRMeS8KhdkMoLXQw==}
+-    engines: {node: '>=18'}
+-    hasBin: true
+-
+   postcss@8.5.6:
+     resolution: {integrity: sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==}
+     engines: {node: ^10 || ^12 || >=14}
+@@ -1225,6 +1225,14 @@ snapshots:
+     dependencies:
+       mimic-function: 5.0.1
+ 
++  patchright-core@1.57.0: {}
++
++  patchright@1.57.0:
++    dependencies:
++      patchright-core: 1.57.0
++    optionalDependencies:
++      fsevents: 2.3.2
++
+   path-key@3.1.1: {}
+ 
+   path-key@4.0.0: {}
+@@ -1239,14 +1247,6 @@ snapshots:
+ 
+   pidtree@0.6.0: {}
+ 
+-  playwright-core@1.57.0: {}
+-
+-  playwright@1.57.0:
+-    dependencies:
+-      playwright-core: 1.57.0
+-    optionalDependencies:
+-      fsevents: 2.3.2
+-
+   postcss@8.5.6:
+     dependencies:
+       nanoid: 3.3.11
+diff --git a/scripts/postinstall.js b/scripts/postinstall.js
+index 31914da..3cd144c 100644
+--- a/scripts/postinstall.js
++++ b/scripts/postinstall.js
+@@ -30,7 +30,7 @@ const packageJson = JSON.parse(
+ const version = packageJson.version;
+ 
+ // GitHub release URL
+-const GITHUB_REPO = 'anthropics/agent-browser'; // Update this to your actual repo
++const GITHUB_REPO = 'BUNotesAI/agent-browser-userdata';
+ const DOWNLOAD_URL = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${binaryName}`;
+ 
+ async function downloadFile(url, dest) {
+@@ -98,16 +98,16 @@ async function main() {
+     console.log('  2. Run: npm run build:native');
+   }
+ 
+-  // Reminder about Playwright browsers
++  // Reminder about Patchright browsers
+   console.log('');
+   console.log('╔═══════════════════════════════════════════════════════════════════════════╗');
+   console.log('║ To download browser binaries, run:                                        ║');
+   console.log('║                                                                           ║');
+-  console.log('║     npx playwright install chromium                                       ║');
++  console.log('║     npx patchright install chromium                                       ║');
+   console.log('║                                                                           ║');
+   console.log('║ On Linux, include system dependencies with:                               ║');
+   console.log('║                                                                           ║');
+-  console.log('║     npx playwright install --with-deps chromium                           ║');
++  console.log('║     npx patchright install --with-deps chromium                           ║');
+   console.log('║                                                                           ║');
+   console.log('╚═══════════════════════════════════════════════════════════════════════════╝');
+ }
+diff --git a/src/actions.ts b/src/actions.ts
+index 6c168d9..73eea25 100644
+--- a/src/actions.ts
++++ b/src/actions.ts
+@@ -1,4 +1,4 @@
+-import type { Page, Frame } from 'playwright-core';
++import type { Page, Frame } from 'patchright-core';
+ import type { BrowserManager } from './browser.js';
+ import type {
+   Command,
+@@ -112,7 +112,7 @@ interface SnapshotData {
+ }
+ 
+ /**
+- * Convert Playwright errors to AI-friendly messages
++ * Convert Patchright errors to AI-friendly messages
+  */
+ function toAIFriendlyError(error: unknown, selector: string): Error {
+   const message = error instanceof Error ? error.message : String(error);
+@@ -702,7 +702,7 @@ async function handleWindowNew(
+   return successResponse(command.id, result);
+ }
+ 
+-// New handlers for enhanced Playwright parity
++// New handlers for enhanced Patchright parity
+ 
+ async function handleFill(command: FillCommand, browser: BrowserManager): Promise<Response> {
+   const locator = browser.getLocator(command.selector);
+@@ -1272,11 +1272,17 @@ async function handleStateLoad(
+ async function handleConsole(command: ConsoleCommand, browser: BrowserManager): Promise<Response> {
+   if (command.clear) {
+     browser.clearConsoleMessages();
+-    return successResponse(command.id, { cleared: true });
++    return successResponse(command.id, {
++      cleared: true,
++      note: 'Console messages are unavailable when using Patchright.',
++    });
+   }
+ 
+   const messages = browser.getConsoleMessages();
+-  return successResponse(command.id, { messages });
++  return successResponse(command.id, {
++    messages,
++    note: 'Console messages are unavailable when using Patchright.',
++  });
+ }
+ 
+ async function handleErrors(command: ErrorsCommand, browser: BrowserManager): Promise<Response> {
+diff --git a/src/browser.ts b/src/browser.ts
+index e44db49..a834aa8 100644
+--- a/src/browser.ts
++++ b/src/browser.ts
+@@ -1,7 +1,5 @@
+ import {
+   chromium,
+-  firefox,
+-  webkit,
+   devices,
+   type Browser,
+   type BrowserContext,
+@@ -11,7 +9,7 @@ import {
+   type Request,
+   type Route,
+   type Locator,
+-} from 'playwright-core';
++} from 'patchright-core';
+ import * as fs from 'fs/promises';
+ import * as path from 'path';
+ import * as os from 'os';
+@@ -39,7 +37,7 @@ interface PageError {
+ }
+ 
+ /**
+- * Manages the Playwright browser lifecycle with multiple tabs/windows
++ * Manages the Patchright browser lifecycle with multiple tabs/windows
+  */
+ export class BrowserManager {
+   private browser: Browser | null = null;
+@@ -603,10 +601,12 @@ export class BrowserManager {
+       return;
+     }
+ 
+-    // Select browser type
++    // Select browser type (Patchright supports Chromium only)
+     const browserType = options.browser ?? 'chromium';
+-    const launcher =
+-      browserType === 'firefox' ? firefox : browserType === 'webkit' ? webkit : chromium;
++    if (browserType !== 'chromium') {
++      throw new Error(`Unsupported browser: ${browserType}. Patchright supports Chromium only.`);
++    }
++    const launcher = chromium;
+ 
+     // Resolve userDataDir - use default if not provided
+     const userDataDir = options.userDataDir ?? this.getDefaultUserDataDir();
+@@ -614,7 +614,7 @@ export class BrowserManager {
+     // Ensure directory exists (mkdir -p)
+     await this.ensureDirectoryExists(userDataDir);
+ 
+-    // Fix for macOS: Playwright's 'chrome' channel often launches "Chrome for Testing".
++    // Fix for macOS: Patchright's 'chrome' channel can launch "Chrome for Testing".
+     // If the user requests 'chrome' on macOS and doesn't specify an executable path,
+     // we attempt to resolve the system Chrome path to ensure the authentic Google Chrome is used.
+     let executablePath = options.executablePath;
+@@ -624,12 +624,12 @@ export class BrowserManager {
+         await fs.access(systemChromePath);
+         executablePath = systemChromePath;
+       } catch {
+-        // Fallback to Playwright's default behavior if system Chrome is not found
++        // Fallback to default behavior if system Chrome is not found
+       }
+     }
+ 
+     // Launch persistent context (replaces launch + newContext)
+-    // Note: When executablePath is set, don't pass channel to avoid Playwright prioritizing channel
++    // Note: When executablePath is set, don't pass channel to avoid prioritizing channel
+     const context = await launcher.launchPersistentContext(userDataDir, {
+       headless: options.headless ?? true,
+       executablePath: executablePath,
+@@ -645,7 +645,7 @@ export class BrowserManager {
+       await context.addInitScript(script);
+     }
+ 
+-    // Set default timeout to 10 seconds (Playwright default is 30s)
++    // Set default timeout to 10 seconds (default is 30s)
+     context.setDefaultTimeout(10000);
+ 
+     // Set extra HTTP headers if provided
+diff --git a/src/protocol.ts b/src/protocol.ts
+index a2a02a4..c783593 100644
+--- a/src/protocol.ts
++++ b/src/protocol.ts
+@@ -17,7 +17,7 @@ const launchSchema = baseCommandSchema.extend({
+       height: z.number().positive(),
+     })
+     .optional(),
+-  browser: z.enum(['chromium', 'firefox', 'webkit']).optional(),
++  browser: z.enum(['chromium']).optional(),
+   headers: z.record(z.string()).optional(),
+   executablePath: z.string().optional(),
+   userDataDir: z.string().optional(),
+diff --git a/src/snapshot.ts b/src/snapshot.ts
+index de81aa9..11f6dab 100644
+--- a/src/snapshot.ts
++++ b/src/snapshot.ts
+@@ -17,7 +17,7 @@
+  *   agent-browser click @e2             # Click element by ref
+  */
+ 
+-import type { Page, Locator } from 'playwright-core';
++import type { Page, Locator } from 'patchright-core';
+ 
+ export interface RefMap {
+   [ref: string]: {
+@@ -146,7 +146,7 @@ export async function getEnhancedSnapshot(
+   resetRefs();
+   const refs: RefMap = {};
+ 
+-  // Get ARIA snapshot from Playwright
++  // Get ARIA snapshot from Patchright
+   const locator = options.selector ? page.locator(options.selector) : page.locator(':root');
+   const ariaTree = await locator.ariaSnapshot();
+ 
+diff --git a/src/types.ts b/src/types.ts
+index 51793f8..14f4289 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -1,4 +1,4 @@
+-import type { Page, Browser, BrowserContext } from 'playwright-core';
++import type { Page, Browser, BrowserContext } from 'patchright-core';
+ 
+ // Base command structure
+ export interface BaseCommand {
+@@ -11,7 +11,7 @@ export interface LaunchCommand extends BaseCommand {
+   action: 'launch';
+   headless?: boolean;
+   viewport?: { width: number; height: number };
+-  browser?: 'chromium' | 'firefox' | 'webkit';
++  browser?: 'chromium';
+   headers?: Record<string, string>;
+   executablePath?: string;
+   userDataDir?: string;
+-- 
+2.39.5 (Apple Git-154)
+

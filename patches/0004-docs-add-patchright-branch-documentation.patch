@@ -1,0 +1,41 @@
+From 98c23ac7ac4b401046f6d93958ccd42ca624cbe2 Mon Sep 17 00:00:00 2001
+From: Alex Wang <idea.wangtj@gmail.com>
+Date: Tue, 13 Jan 2026 17:57:57 +0800
+Subject: [PATCH 4/4] docs: add patchright branch documentation
+
+Add section explaining the agent-browser-with-userdata-patchright branch
+which uses Patchright instead of Playwright for bypassing bot detection.
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+---
+ README.md | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/README.md b/README.md
+index 1b1da22..6c6663b 100644
+--- a/README.md
++++ b/README.md
+@@ -541,6 +541,20 @@ curl -o .claude/skills/agent-browser/SKILL.md \
+   https://raw.githubusercontent.com/BUNotesAI/agent-browser-userdata/main/skills/agent-browser/SKILL.md
+ ```
+ 
++## Branches
++
++### Patchright Version
++
++The [`agent-browser-with-userdata-patchright`](https://github.com/BUNotesAI/agent-browser-userdata/tree/agent-browser-with-userdata-patchright) branch replaces Playwright with [Patchright](https://github.com/AhmedMostafa16/patchright) - a patched version of Playwright that helps bypass bot detection. Use this branch if you're encountering issues with websites that block automation.
++
++```bash
++# Install from patchright branch
++git clone -b agent-browser-with-userdata-patchright https://github.com/BUNotesAI/agent-browser-userdata
++cd agent-browser-userdata
++pnpm install
++pnpm build
++```
++
+ ## License
+ 
+ Apache-2.0
+-- 
+2.39.5 (Apple Git-154)
+

@@ -101,29 +101,31 @@ agent-browser wait --load networkidle
 agent-browser snapshot -i  # Check result
 ```
 
-## Example: Authentication with saved state
+## Persistent State (automatic)
+
+Browser state (cookies, localStorage) is automatically persisted to `~/tmp/agent-browser/`. No need to manually save/load state for authentication:
 
 ```bash
-# Login once
+# Login once - state is automatically saved
 agent-browser open https://app.example.com/login
 agent-browser snapshot -i
 agent-browser fill @e1 "username"
 agent-browser fill @e2 "password"
 agent-browser click @e3
 agent-browser wait --url "**/dashboard"
-agent-browser state save auth.json
+agent-browser close
 
-# Later sessions: load saved state
-agent-browser state load auth.json
-agent-browser open https://app.example.com/dashboard
+# Later: cookies and localStorage are preserved
+agent-browser open https://app.example.com/dashboard  # Already logged in!
 ```
 
-## Sessions (parallel browsers)
+## Sessions
+
+Note: All sessions share the same userDataDir (`~/tmp/agent-browser/`), so parallel sessions may cause file locking issues. Use one session at a time for best results.
 
 ```bash
-agent-browser --session test1 open site-a.com
-agent-browser --session test2 open site-b.com
-agent-browser session list
+agent-browser --session mytest open site.com  # Named session
+agent-browser session list                     # List active sessions
 ```
 
 ## JSON output (for parsing)

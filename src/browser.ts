@@ -12,6 +12,10 @@ import {
   type Route,
   type Locator,
 } from 'playwright-core';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
+import { stealthScripts } from './stealth.js';
 import type { LaunchCommand } from './types.js';
 import { type RefMap, type EnhancedSnapshot, getEnhancedSnapshot, parseRef } from './snapshot.js';
 
@@ -39,6 +43,7 @@ interface PageError {
  */
 export class BrowserManager {
   private browser: Browser | null = null;
+  private persistentContext: BrowserContext | null = null;
   private contexts: BrowserContext[] = [];
   private pages: Page[] = [];
   private activePageIndex: number = 0;
@@ -57,7 +62,22 @@ export class BrowserManager {
    * Check if browser is launched
    */
   isLaunched(): boolean {
-    return this.browser !== null;
+    return this.persistentContext !== null;
+  }
+
+  /**
+   * Get the default userDataDir path
+   */
+  private getDefaultUserDataDir(): string {
+    const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
+    return path.join(home, 'tmp', 'agent-browser');
+  }
+
+  /**
+   * Ensure directory exists (mkdir -p equivalent)
+   */
+  private async ensureDirectoryExists(dir: string): Promise<void> {
+    await fs.mkdir(dir, { recursive: true });
   }
 
   /**
@@ -575,11 +595,11 @@ export class BrowserManager {
 
   /**
    * Launch the browser with the specified options
-   * If already launched, this is a no-op (browser stays open)
+   * Uses launchPersistentContext for automatic state persistence
    */
   async launch(options: LaunchCommand): Promise<void> {
     // If already launched, don't relaunch
-    if (this.browser) {
+    if (this.persistentContext) {
       return;
     }
 
@@ -588,26 +608,61 @@ export class BrowserManager {
     const launcher =
       browserType === 'firefox' ? firefox : browserType === 'webkit' ? webkit : chromium;
 
-    // Launch browser
-    this.browser = await launcher.launch({
+    // Resolve userDataDir - use default if not provided
+    const userDataDir = options.userDataDir ?? this.getDefaultUserDataDir();
+
+    // Ensure directory exists (mkdir -p)
+    await this.ensureDirectoryExists(userDataDir);
+
+    // Fix for macOS: Playwright's 'chrome' channel often launches "Chrome for Testing".
+    // If the user requests 'chrome' on macOS and doesn't specify an executable path,
+    // we attempt to resolve the system Chrome path to ensure the authentic Google Chrome is used.
+    let executablePath = options.executablePath;
+    if (os.platform() === 'darwin' && options.channel === 'chrome' && !executablePath) {
+      const systemChromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+      try {
+        await fs.access(systemChromePath);
+        executablePath = systemChromePath;
+      } catch {
+        // Fallback to Playwright's default behavior if system Chrome is not found
+      }
+    }
+
+    // Launch persistent context (replaces launch + newContext)
+    // Note: When executablePath is set, don't pass channel to avoid Playwright prioritizing channel
+    const context = await launcher.launchPersistentContext(userDataDir, {
       headless: options.headless ?? true,
-      executablePath: options.executablePath,
+      executablePath: executablePath,
+      channel: executablePath ? undefined : options.channel,
+      viewport: options.viewport ?? { width: 1280, height: 720 },
+      // Hide "Chrome is being controlled by automated test software" infobar
+      ignoreDefaultArgs: ['--enable-automation'],
+      args: ['--disable-blink-features=AutomationControlled'],
     });
 
-    // Create context with viewport and optional headers
-    const context = await this.browser.newContext({
-      viewport: options.viewport ?? { width: 1280, height: 720 },
-      extraHTTPHeaders: options.headers,
-    });
+    // Apply stealth scripts
+    for (const script of stealthScripts) {
+      await context.addInitScript(script);
+    }
 
     // Set default timeout to 10 seconds (Playwright default is 30s)
     context.setDefaultTimeout(10000);
 
-    this.contexts.push(context);
+    // Set extra HTTP headers if provided
+    if (options.headers) {
+      await context.setExtraHTTPHeaders(options.headers);
+    }
 
-    // Create initial page
+    this.persistentContext = context;
+    this.contexts = [context];
+
+    // Close any existing pages from previous sessions and create a fresh one
+    const existingPages = context.pages();
+    for (const p of existingPages) {
+      await p.close().catch(() => {});
+    }
     const page = await context.newPage();
-    this.pages.push(page);
+    this.pages = [page];
     this.activePageIndex = 0;
 
     // Automatically start console and error tracking
@@ -638,7 +693,7 @@ export class BrowserManager {
    * Create a new tab in the current context
    */
   async newTab(): Promise<{ index: number; total: number }> {
-    if (!this.browser || this.contexts.length === 0) {
+    if (!this.persistentContext || this.contexts.length === 0) {
       throw new Error('Browser not launched');
     }
 
@@ -654,30 +709,16 @@ export class BrowserManager {
   }
 
   /**
-   * Create a new window (new context)
+   * Create a new window (new context) - NOT SUPPORTED in persistent mode
    */
-  async newWindow(viewport?: {
+  async newWindow(_viewport?: {
     width: number;
     height: number;
   }): Promise<{ index: number; total: number }> {
-    if (!this.browser) {
-      throw new Error('Browser not launched');
-    }
-
-    const context = await this.browser.newContext({
-      viewport: viewport ?? { width: 1280, height: 720 },
-    });
-    context.setDefaultTimeout(10000);
-    this.contexts.push(context);
-
-    const page = await context.newPage();
-    this.pages.push(page);
-    this.activePageIndex = this.pages.length - 1;
-
-    // Set up tracking for the new page
-    this.setupPageTracking(page);
-
-    return { index: this.activePageIndex, total: this.pages.length };
+    throw new Error(
+      'newWindow() is not supported in persistent context mode. ' +
+        'Use newTab() to open additional pages in the same context.'
+    );
   }
 
   /**
@@ -750,16 +791,14 @@ export class BrowserManager {
     }
     this.pages = [];
 
-    for (const context of this.contexts) {
-      await context.close().catch(() => {});
+    // Close persistent context (this closes the browser process)
+    if (this.persistentContext) {
+      await this.persistentContext.close().catch(() => {});
+      this.persistentContext = null;
     }
+
     this.contexts = [];
-
-    if (this.browser) {
-      await this.browser.close().catch(() => {});
-      this.browser = null;
-    }
-
+    this.browser = null;
     this.activePageIndex = 0;
     this.refMap = {};
     this.lastSnapshot = '';

@@ -8,6 +8,7 @@ pub struct Flags {
     pub session: String,
     pub headers: Option<String>,
     pub executable_path: Option<String>,
+    pub channel: Option<String>,
 }
 
 pub fn parse_flags(args: &[String]) -> Flags {
@@ -19,6 +20,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         session: env::var("AGENT_BROWSER_SESSION").unwrap_or_else(|_| "default".to_string()),
         headers: None,
         executable_path: env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
+        channel: env::var("AGENT_BROWSER_CHANNEL").ok(),
     };
 
     let mut i = 0;
@@ -46,6 +48,12 @@ pub fn parse_flags(args: &[String]) -> Flags {
                     i += 1;
                 }
             }
+            "--channel" => {
+                if let Some(c) = args.get(i + 1) {
+                    flags.channel = Some(c.clone());
+                    i += 1;
+                }
+            }
             _ => {}
         }
         i += 1;
@@ -60,7 +68,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
     // Global flags that should be stripped from command args
     const GLOBAL_FLAGS: &[&str] = &["--json", "--full", "--headed", "--debug"];
     // Global flags that take a value (need to skip the next arg too)
-    const GLOBAL_FLAGS_WITH_VALUE: &[&str] = &["--session", "--headers", "--executable-path"];
+    const GLOBAL_FLAGS_WITH_VALUE: &[&str] = &["--session", "--headers", "--executable-path", "--channel"];
 
     for arg in args.iter() {
         if skip_next {
@@ -185,5 +193,31 @@ mod tests {
         let flags = parse_flags(&args("--session test --executable-path /custom/chrome open example.com"));
         assert_eq!(flags.session, "test");
         assert_eq!(flags.executable_path, Some("/custom/chrome".to_string()));
+    }
+
+    #[test]
+    fn test_parse_channel_flag() {
+        let flags = parse_flags(&args("--channel chrome open example.com"));
+        assert_eq!(flags.channel, Some("chrome".to_string()));
+    }
+
+    #[test]
+    fn test_parse_channel_flag_no_value() {
+        let flags = parse_flags(&args("--channel"));
+        assert_eq!(flags.channel, None);
+    }
+
+    #[test]
+    fn test_clean_args_removes_channel() {
+        let cleaned = clean_args(&args("--channel chrome open example.com"));
+        assert_eq!(cleaned, vec!["open", "example.com"]);
+    }
+
+    #[test]
+    fn test_parse_channel_with_other_flags() {
+        let flags = parse_flags(&args("--channel chrome --headed --json open example.com"));
+        assert_eq!(flags.channel, Some("chrome".to_string()));
+        assert!(flags.headed);
+        assert!(flags.json);
     }
 }

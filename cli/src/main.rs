@@ -149,7 +149,7 @@ fn main() {
         }
     };
 
-    let daemon_result = match ensure_daemon(&flags.session, flags.headed, flags.executable_path.as_deref()) {
+    let daemon_result = match ensure_daemon(&flags.session, flags.headed, flags.executable_path.as_deref(), flags.channel.as_deref()) {
         Ok(result) => result,
         Err(e) => {
             if flags.json {
@@ -161,16 +161,25 @@ fn main() {
         }
     };
 
-    // Warn if executable_path was specified but daemon was already running
-    if daemon_result.already_running && flags.executable_path.is_some() {
-        if !flags.json {
+    // Warn if executable_path or channel was specified but daemon was already running
+    if daemon_result.already_running {
+        if flags.executable_path.is_some() && !flags.json {
             eprintln!("\x1b[33m⚠\x1b[0m --executable-path ignored: daemon already running. Use 'agent-browser close' first to restart with new path.");
+        }
+        if flags.channel.is_some() && !flags.json {
+            eprintln!("\x1b[33m⚠\x1b[0m --channel ignored: daemon already running. Use 'agent-browser close' first to restart with new channel.");
         }
     }
 
     // If --headed flag is set, send launch command first to switch to headed mode
     if flags.headed {
-        let launch_cmd = json!({ "id": gen_id(), "action": "launch", "headless": false });
+        let mut launch_cmd = json!({ "id": gen_id(), "action": "launch", "headless": false });
+        if let Some(ch) = &flags.channel {
+            launch_cmd["channel"] = json!(ch);
+        }
+        if let Some(path) = &flags.executable_path {
+            launch_cmd["executablePath"] = json!(path);
+        }
         if let Err(e) = send_command(launch_cmd, &flags.session) {
             if !flags.json {
                 eprintln!("\x1b[33m⚠\x1b[0m Could not switch to headed mode: {}", e);

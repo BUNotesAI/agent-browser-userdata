@@ -557,7 +557,7 @@ This fork maintains patch files in `patches/` for easy reapplication after upstr
 
 ```bash
 # Add upstream remote (first time only)
-git remote add upstream https://github.com/anthropics/agent-browser.git
+git remote add upstream https://github.com/vercel-labs/agent-browser.git
 
 # Fetch and rebase onto upstream
 git fetch upstream

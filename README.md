@@ -14,11 +14,13 @@ agent-browser install  # Download Chromium
 ### From Source
 
 ```bash
-git clone https://github.com/vercel-labs/agent-browser
-cd agent-browser
+git clone https://github.com/BUNotesAI/agent-browser-userdata
+cd agent-browser-userdata
 pnpm install
 pnpm build
-agent-browser install
+pnpm build:native  # Build Rust CLI
+./bin/agent-browser install
+pnpm link --global  # Install globally
 ```
 
 ### Linux Dependencies
@@ -294,6 +296,7 @@ agent-browser snapshot -i -c -d 5         # Combine options
 | `--session <name>` | Use isolated session (or `AGENT_BROWSER_SESSION` env) |
 | `--headers <json>` | Set HTTP headers scoped to the URL's origin |
 | `--executable-path <path>` | Custom browser executable (or `AGENT_BROWSER_EXECUTABLE_PATH` env) |
+| `--channel <name>` | Browser channel: `chrome`, `msedge`, `chrome-beta` (use system browser) |
 | `--json` | JSON output (for agents) |
 | `--full, -f` | Full page screenshot |
 | `--name, -n` | Locator name filter |
@@ -387,6 +390,22 @@ agent-browser open example.com --headed
 ```
 
 This opens a visible browser window instead of running headless.
+
+## Google Login (OAuth)
+
+Google blocks Playwright's bundled "Chrome for Testing" browser. Use `--channel chrome` to launch your system Chrome instead:
+
+```bash
+# First time: login with system Chrome (headed mode required)
+agent-browser --channel chrome --headed open https://accounts.google.com
+# Complete login manually in the browser window
+agent-browser close
+
+# After login: session persists in ~/tmp/agent-browser/, can use headless
+agent-browser open https://mail.google.com  # Already logged in!
+```
+
+**Note:** If daemon is already running, `--channel` is ignored. Close first with `agent-browser close`.
 
 ## Authenticated Sessions
 
@@ -519,7 +538,7 @@ Or download:
 ```bash
 mkdir -p .claude/skills/agent-browser
 curl -o .claude/skills/agent-browser/SKILL.md \
-  https://raw.githubusercontent.com/vercel-labs/agent-browser/main/skills/agent-browser/SKILL.md
+  https://raw.githubusercontent.com/BUNotesAI/agent-browser-userdata/main/skills/agent-browser/SKILL.md
 ```
 
 ## License

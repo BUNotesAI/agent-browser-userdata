@@ -95,10 +95,61 @@ export class BrowserManager {
   private navigationDelay: number = 10000;
 
   /**
-   * Check if browser is launched
+   * Check if browser is launched and still alive
+   * Handles case where browser was externally closed (e.g., Cmd+Q)
    */
   isLaunched(): boolean {
-    return this.browser !== null || this.isPersistentContext || this.persistentContext !== null;
+    // Check if we have a browser or persistent context reference
+    if (this.browser === null && !this.isPersistentContext && this.persistentContext === null) {
+      return false;
+    }
+
+    // For regular browser, check if still connected
+    if (this.browser !== null) {
+      if (!this.browser.isConnected()) {
+        // Browser was externally closed, reset state
+        this.resetState();
+        return false;
+      }
+      return true;
+    }
+
+    // For persistent context, check if pages are still accessible
+    if (this.persistentContext !== null) {
+      try {
+        // If pages() throws or returns empty after we had pages, browser is dead
+        const pages = this.persistentContext.pages();
+        if (this.pages.length > 0 && pages.length === 0) {
+          // Browser was externally closed
+          this.resetState();
+          return false;
+        }
+        return true;
+      } catch {
+        // Context is dead, reset state
+        this.resetState();
+        return false;
+      }
+    }
+
+    return this.isPersistentContext;
+  }
+
+  /**
+   * Reset internal state when browser is externally closed
+   */
+  private resetState(): void {
+    this.browser = null;
+    this.persistentContext = null;
+    this.isPersistentContext = false;
+    this.pages = [];
+    this.contexts = [];
+    this.cdpPort = null;
+    this.activePageIndex = 0;
+    this.refMap = {};
+    this.lastSnapshot = '';
+    this.cdpSession = null;
+    this.screencastActive = false;
   }
 
   /**
@@ -827,6 +878,12 @@ export class BrowserManager {
     this.persistentContext = context;
     this.contexts = [context];
     this.cdpPort = null;
+
+    // Listen for external browser close (e.g., user presses Cmd+Q)
+    // This resets state so subsequent isLaunched() returns false
+    context.on('close', () => {
+      this.resetState();
+    });
 
     // Close any existing pages from previous sessions and create a fresh one
     const existingPages = context.pages();

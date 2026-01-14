@@ -140,7 +140,18 @@ fn is_daemon_running(session: &str) -> bool {
 fn daemon_ready(session: &str) -> bool {
     #[cfg(unix)]
     {
-        get_socket_path(session).exists()
+        let socket_path = get_socket_path(session);
+        if !socket_path.exists() {
+            return false;
+        }
+        // Actually try to connect, not just check file existence
+        // This prevents race conditions where socket file exists but daemon is shutting down
+        UnixStream::connect(&socket_path)
+            .map(|s| {
+                drop(s);
+                true
+            })
+            .unwrap_or(false)
     }
     #[cfg(windows)]
     {

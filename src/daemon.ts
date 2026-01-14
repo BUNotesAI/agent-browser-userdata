@@ -207,18 +207,35 @@ export async function startDaemon(options?: { streamPort?: number }): Promise<vo
             });
           }
 
-          // Handle close command specially
+          // Handle close command specially - synchronous graceful shutdown
           if (parseResult.command.action === 'close') {
-            const response = await executeCommand(parseResult.command, browser);
-            socket.write(serializeResponse(response) + '\n');
-
             if (!shuttingDown) {
               shuttingDown = true;
-              setTimeout(() => {
-                server.close();
-                cleanupSocket();
+
+              // Stop stream server first if running
+              if (streamServer) {
+                await streamServer.stop();
+                streamServer = null;
+              }
+
+              // Close browser
+              await browser.close();
+
+              // Stop accepting new connections
+              server.close();
+
+              // Cleanup socket/pid files BEFORE responding
+              // This ensures subsequent is_daemon_running() checks fail properly
+              cleanupSocket();
+
+              // Send success response
+              const response = { id: parseResult.command.id, success: true as const, data: null };
+              socket.write(serializeResponse(response) + '\n');
+
+              // Close socket and exit
+              socket.end(() => {
                 process.exit(0);
-              }, 100);
+              });
             }
             return;
           }

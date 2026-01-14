@@ -42,13 +42,16 @@ describe('BrowserManager', () => {
     it('should reconnect when CDP port changes', async () => {
       const newBrowser = new BrowserManager();
       await newBrowser.launch({ id: 'test', action: 'launch', headless: true });
-      expect(newBrowser.getBrowser()).not.toBeNull();
+      // In persistent context mode (Patchright), getBrowser() returns null
+      // because launchPersistentContext doesn't create a separate Browser instance
+      expect(newBrowser.isLaunched()).toBe(true);
 
       await expect(
         newBrowser.launch({ id: 'test', action: 'launch', cdpPort: 59999 })
       ).rejects.toThrow();
 
-      expect(newBrowser.getBrowser()).toBeNull();
+      // After failed CDP connection attempt, browser should be closed
+      expect(newBrowser.isLaunched()).toBe(false);
       await newBrowser.close();
     });
   });

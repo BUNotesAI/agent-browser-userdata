@@ -310,6 +310,32 @@ agent-browser snapshot -i -c -d 5         # Combine options
 
 **Note:** By default, agent-browser uses your system Chrome for better compatibility with existing browser profiles. Use `--bundled` to use the bundled Chrome for Testing instead.
 
+## Rate Limiting
+
+To be friendly to target servers during testing, agent-browser adds a **10-second delay** before each navigation by default.
+
+### Configure Navigation Delay
+
+```bash
+# Default: 10 second delay between navigations
+agent-browser open example.com
+
+# Disable delay for faster testing (not recommended for external servers)
+AGENT_BROWSER_NAV_DELAY_MS=0 agent-browser open example.com
+
+# Custom delay (e.g., 5 seconds)
+AGENT_BROWSER_NAV_DELAY_MS=5000 agent-browser open example.com
+```
+
+| Environment Variable | Description | Default |
+|---------------------|-------------|---------|
+| `AGENT_BROWSER_NAV_DELAY_MS` | Delay in milliseconds before each navigation | `10000` (10s) |
+
+**Why rate limiting?**
+- Prevents overloading target servers during automated testing
+- Avoids being blocked by rate limiters
+- More respectful to external services
+
 ## Selectors
 
 ### Refs (Recommended for AI)

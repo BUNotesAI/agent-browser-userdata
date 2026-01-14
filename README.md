@@ -413,15 +413,19 @@ agent-browser fill @e3 "input text"
 agent-browser snapshot -i --json
 ```
 
-## Headed Mode
+## Headed Mode (Default)
 
-Show the browser window for debugging:
+agent-browser **always runs in headed mode** (visible browser window) to:
+- Maintain consistent browser fingerprint for OAuth/login flows
+- Avoid Google and other services blocking automation detection
+- Preserve login state across sessions
 
 ```bash
-agent-browser open example.com --headed
+agent-browser open example.com        # Opens visible browser window
+agent-browser open example.com --headed  # Same behavior (--headed is now default)
 ```
 
-This opens a visible browser window instead of running headless.
+**Note:** The `--headed` flag is kept for backward compatibility but has no effect since headed mode is always enabled.
 
 ## Browser Selection
 

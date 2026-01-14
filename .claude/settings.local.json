@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git checkout:*)",
       "Bash(git rebase:*)",
-      "Bash(./bin/agent-browser:*)"
+      "Bash(./bin/agent-browser:*)",
+      "Bash(agent-browser:*)"
     ]
   }
 }

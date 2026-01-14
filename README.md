@@ -298,7 +298,8 @@ agent-browser snapshot -i -c -d 5         # Combine options
 | `--session <name>` | Use isolated session (or `AGENT_BROWSER_SESSION` env) |
 | `--headers <json>` | Set HTTP headers scoped to the URL's origin |
 | `--executable-path <path>` | Custom browser executable (or `AGENT_BROWSER_EXECUTABLE_PATH` env) |
-| `--channel <name>` | Browser channel: `chrome`, `msedge`, `chrome-beta` (use system browser) |
+| `--channel <name>` | Browser channel: `chrome`, `msedge`, `chrome-beta` |
+| `--bundled` | Use bundled Chrome for Testing instead of system Chrome |
 | `--json` | JSON output (for agents) |
 | `--full, -f` | Full page screenshot |
 | `--name, -n` | Locator name filter |
@@ -306,6 +307,8 @@ agent-browser snapshot -i -c -d 5         # Combine options
 | `--headed` | Show browser window (not headless) |
 | `--cdp <port>` | Connect via Chrome DevTools Protocol |
 | `--debug` | Debug output |
+
+**Note:** By default, agent-browser uses your system Chrome for better compatibility with existing browser profiles. Use `--bundled` to use the bundled Chrome for Testing instead.
 
 ## Selectors
 
@@ -394,13 +397,41 @@ agent-browser open example.com --headed
 
 This opens a visible browser window instead of running headless.
 
-## Google Login (OAuth)
+## Browser Selection
 
-Google blocks bundled "Chrome for Testing" browsers. Use `--channel chrome` to launch your system Chrome instead:
+By default, agent-browser uses your **system Chrome** for better compatibility:
+
+- **Profile compatibility**: System Chrome works seamlessly with existing user data profiles
+- **Anti-detection**: System Chrome has a more natural browser fingerprint
+- **Automatic cleanup**: Profile lock conflicts are automatically resolved
 
 ```bash
-# First time: login with system Chrome (headed mode required)
-agent-browser --channel chrome --headed open https://accounts.google.com
+# Default: uses system Chrome
+agent-browser open example.com
+
+# Explicitly use bundled Chrome for Testing
+agent-browser --bundled open example.com
+
+# Use specific browser channel
+agent-browser --channel msedge open example.com
+```
+
+**Supported system Chrome paths:**
+| Platform | Path |
+|----------|------|
+| macOS | `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` |
+| Windows | `C:\Program Files\Google\Chrome\Application\chrome.exe` |
+| Linux | `/usr/bin/google-chrome` |
+
+If system Chrome is not found, agent-browser falls back to the bundled Chrome for Testing.
+
+## Google Login (OAuth)
+
+Since agent-browser uses system Chrome by default, Google login works out of the box:
+
+```bash
+# First time: login in headed mode
+agent-browser --headed open https://accounts.google.com
 # Complete login manually in the browser window
 agent-browser close
 
@@ -408,7 +439,7 @@ agent-browser close
 agent-browser open https://mail.google.com  # Already logged in!
 ```
 
-**Note:** If daemon is already running, `--channel` is ignored. Close first with `agent-browser close`.
+**Note:** If you use `--bundled`, Google may block the login as it detects "Chrome for Testing".
 
 ## Authenticated Sessions
 

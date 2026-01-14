@@ -836,7 +836,8 @@ export class BrowserManager {
             `--load-extension=${extPaths}`,
             '--disable-blink-features=AutomationControlled',
           ],
-          ignoreDefaultArgs: ['--enable-automation'],
+          // Hide Chrome automation warnings
+          ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
           viewport,
           extraHTTPHeaders: options.headers,
         })
@@ -854,8 +855,10 @@ export class BrowserManager {
           executablePath: executablePath,
           channel: executablePath ? undefined : effectiveChannel,
           viewport,
-          // Hide "Chrome is being controlled by automated test software" infobar
-          ignoreDefaultArgs: ['--enable-automation'],
+          // Hide Chrome automation warnings:
+          // --enable-automation: "Chrome is being controlled by automated test software"
+          // --no-sandbox: "You are using an unsupported command-line flag"
+          ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
           args: ['--disable-blink-features=AutomationControlled'],
         })
       );

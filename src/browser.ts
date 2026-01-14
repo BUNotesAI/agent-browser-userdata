@@ -835,9 +835,10 @@ export class BrowserManager {
             `--disable-extensions-except=${extPaths}`,
             `--load-extension=${extPaths}`,
             '--disable-blink-features=AutomationControlled',
+            '--test-type', // Suppress warning banners
           ],
-          // Hide Chrome automation warnings
-          ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
+          // Hide "Chrome is being controlled by automated test software" infobar
+          ignoreDefaultArgs: ['--enable-automation'],
           viewport,
           extraHTTPHeaders: options.headers,
         })
@@ -855,11 +856,12 @@ export class BrowserManager {
           executablePath: executablePath,
           channel: executablePath ? undefined : effectiveChannel,
           viewport,
-          // Hide Chrome automation warnings:
-          // --enable-automation: "Chrome is being controlled by automated test software"
-          // --no-sandbox: "You are using an unsupported command-line flag"
-          ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
-          args: ['--disable-blink-features=AutomationControlled'],
+          // Hide "Chrome is being controlled by automated test software" infobar
+          ignoreDefaultArgs: ['--enable-automation'],
+          args: [
+            '--disable-blink-features=AutomationControlled',
+            '--test-type', // Suppress warning banners
+          ],
         })
       );
       this.isPersistentContext = true;

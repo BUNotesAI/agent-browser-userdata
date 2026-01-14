@@ -692,49 +692,104 @@ export class BrowserManager {
     // Ensure directory exists (mkdir -p)
     await this.ensureDirectoryExists(userDataDir);
 
-    // Fix for macOS: Patchright's 'chrome' channel can launch "Chrome for Testing".
-    // If the user requests 'chrome' on macOS and doesn't specify an executable path,
-    // we attempt to resolve the system Chrome path to ensure the authentic Google Chrome is used.
+    // Default to system Chrome for better compatibility with existing user data profiles.
+    // The bundled "Chrome for Testing" often crashes when opening profiles created by
+    // a different Chrome version. Using system Chrome avoids this issue.
+    //
+    // Channel resolution priority:
+    // 1. If executablePath is specified, use it directly
+    // 2. If channel is 'bundled', use Patchright's bundled Chrome for Testing
+    // 3. If channel is specified (e.g., 'chrome', 'msedge'), use that channel
+    // 4. Default: try system Chrome, fallback to bundled if not available
     let executablePath = options.executablePath;
-    if (os.platform() === 'darwin' && options.channel === 'chrome' && !executablePath) {
-      const systemChromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-      try {
-        await fs.access(systemChromePath);
-        executablePath = systemChromePath;
-      } catch {
-        // Fallback to default behavior if system Chrome is not found
+    let effectiveChannel = options.channel;
+
+    if (!executablePath && options.channel !== 'bundled') {
+      // Try to use system Chrome by default
+      const systemChromePaths: Record<string, string> = {
+        darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        win32: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        linux: '/usr/bin/google-chrome',
+      };
+
+      const systemChromePath = systemChromePaths[os.platform()];
+      if (systemChromePath) {
+        try {
+          await fs.access(systemChromePath);
+          executablePath = systemChromePath;
+          effectiveChannel = undefined; // Don't need channel when using executablePath
+        } catch {
+          // System Chrome not found, will use bundled or specified channel
+        }
       }
     }
+
+    // If channel is 'bundled', clear it so Patchright uses its bundled Chrome
+    if (effectiveChannel === 'bundled') {
+      effectiveChannel = undefined;
+    }
+
+    // Helper function to launch with SingletonLock cleanup on failure
+    const launchWithRetry = async (
+      launchFn: () => Promise<BrowserContext>
+    ): Promise<BrowserContext> => {
+      try {
+        return await launchFn();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // Check if it's a SingletonLock error (profile already in use)
+        if (message.includes('ProcessSingleton') || message.includes('SingletonLock')) {
+          // Clean up the lock file and retry
+          const singletonLock = path.join(userDataDir, 'SingletonLock');
+          const singletonCookie = path.join(userDataDir, 'SingletonCookie');
+          const singletonSocket = path.join(userDataDir, 'SingletonSocket');
+          try {
+            await fs.unlink(singletonLock).catch(() => {});
+            await fs.unlink(singletonCookie).catch(() => {});
+            await fs.unlink(singletonSocket).catch(() => {});
+          } catch {
+            // Ignore cleanup errors
+          }
+          // Retry launch after cleanup
+          return await launchFn();
+        }
+        throw error;
+      }
+    };
 
     let context: BrowserContext;
     if (hasExtensions) {
       // Extensions mode: use launchPersistentContext with extension loading
       const extPaths = options.extensions!.join(',');
-      context = await launcher.launchPersistentContext(userDataDir, {
-        headless: false,
-        executablePath: executablePath,
-        channel: executablePath ? undefined : options.channel,
-        args: [
-          `--disable-extensions-except=${extPaths}`,
-          `--load-extension=${extPaths}`,
-          '--disable-blink-features=AutomationControlled',
-        ],
-        ignoreDefaultArgs: ['--enable-automation'],
-        viewport,
-        extraHTTPHeaders: options.headers,
-      });
+      context = await launchWithRetry(() =>
+        launcher.launchPersistentContext(userDataDir, {
+          headless: false,
+          executablePath: executablePath,
+          channel: executablePath ? undefined : effectiveChannel,
+          args: [
+            `--disable-extensions-except=${extPaths}`,
+            `--load-extension=${extPaths}`,
+            '--disable-blink-features=AutomationControlled',
+          ],
+          ignoreDefaultArgs: ['--enable-automation'],
+          viewport,
+          extraHTTPHeaders: options.headers,
+        })
+      );
       this.isPersistentContext = true;
     } else {
       // Regular mode: use launchPersistentContext for state persistence
-      context = await launcher.launchPersistentContext(userDataDir, {
-        headless: options.headless ?? true,
-        executablePath: executablePath,
-        channel: executablePath ? undefined : options.channel,
-        viewport,
-        // Hide "Chrome is being controlled by automated test software" infobar
-        ignoreDefaultArgs: ['--enable-automation'],
-        args: ['--disable-blink-features=AutomationControlled'],
-      });
+      context = await launchWithRetry(() =>
+        launcher.launchPersistentContext(userDataDir, {
+          headless: options.headless ?? true,
+          executablePath: executablePath,
+          channel: executablePath ? undefined : effectiveChannel,
+          viewport,
+          // Hide "Chrome is being controlled by automated test software" infobar
+          ignoreDefaultArgs: ['--enable-automation'],
+          args: ['--disable-blink-features=AutomationControlled'],
+        })
+      );
       this.isPersistentContext = true;
     }
 

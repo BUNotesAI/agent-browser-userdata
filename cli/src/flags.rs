@@ -75,6 +75,10 @@ pub fn parse_flags(args: &[String]) -> Flags {
                     i += 1;
                 }
             }
+            "--bundled" => {
+                // Use Patchright's bundled Chrome for Testing instead of system Chrome
+                flags.channel = Some("bundled".to_string());
+            }
             _ => {}
         }
         i += 1;
@@ -87,7 +91,7 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
     let mut skip_next = false;
 
     // Global flags that should be stripped from command args
-    const GLOBAL_FLAGS: &[&str] = &["--json", "--full", "--headed", "--debug"];
+    const GLOBAL_FLAGS: &[&str] = &["--json", "--full", "--headed", "--debug", "--bundled"];
     // Global flags that take a value (need to skip the next arg too)
     const GLOBAL_FLAGS_WITH_VALUE: &[&str] = &["--session", "--headers", "--executable-path", "--cdp", "--extension", "--channel"];
 
@@ -238,6 +242,26 @@ mod tests {
     fn test_parse_channel_with_other_flags() {
         let flags = parse_flags(&args("--channel chrome --headed --json open example.com"));
         assert_eq!(flags.channel, Some("chrome".to_string()));
+        assert!(flags.headed);
+        assert!(flags.json);
+    }
+
+    #[test]
+    fn test_parse_bundled_flag() {
+        let flags = parse_flags(&args("--bundled open example.com"));
+        assert_eq!(flags.channel, Some("bundled".to_string()));
+    }
+
+    #[test]
+    fn test_clean_args_removes_bundled() {
+        let cleaned = clean_args(&args("--bundled open example.com"));
+        assert_eq!(cleaned, vec!["open", "example.com"]);
+    }
+
+    #[test]
+    fn test_bundled_with_other_flags() {
+        let flags = parse_flags(&args("--bundled --headed --json open example.com"));
+        assert_eq!(flags.channel, Some("bundled".to_string()));
         assert!(flags.headed);
         assert!(flags.json);
     }

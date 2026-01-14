@@ -1193,11 +1193,16 @@ Options:
   --headers <json>           HTTP headers scoped to URL's origin (for auth)
   --executable-path <path>   Custom browser executable (or AGENT_BROWSER_EXECUTABLE_PATH)
   --extension <path>         Load browser extensions (repeatable).
+  --channel <name>           Browser channel (chrome, msedge, chromium)
+  --bundled                  Use bundled Chrome for Testing instead of system Chrome
   --json                     JSON output
   --full, -f                 Full page screenshot
   --headed                   Show browser window (not headless)
   --cdp <port>               Connect via CDP (Chrome DevTools Protocol)
   --debug                    Debug output
+
+Note: By default, agent-browser uses your system Chrome for better compatibility
+with existing browser profiles. Use --bundled to use the bundled Chrome for Testing.
 
 Environment:
   AGENT_BROWSER_SESSION          Session name (default: "default")

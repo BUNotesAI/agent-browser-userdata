@@ -17,7 +17,7 @@
  *   agent-browser click @e2             # Click element by ref
  */
 
-import type { Page, Locator } from 'patchright-core';
+import type { Page } from './browser-engine.js';
 
 export interface RefMap {
   [ref: string]: {

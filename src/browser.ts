@@ -10,7 +10,7 @@ import {
   type Route,
   type Locator,
   type CDPSession,
-} from 'patchright-core';
+} from './browser-engine.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';

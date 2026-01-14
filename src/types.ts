@@ -1,4 +1,4 @@
-import type { Page, Browser, BrowserContext } from 'patchright-core';
+import type { Page, Browser, BrowserContext } from './browser-engine.js';
 
 // Base command structure
 export interface BaseCommand {

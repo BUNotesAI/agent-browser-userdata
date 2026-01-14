@@ -1,4 +1,4 @@
-import type { Page, Frame } from 'patchright-core';
+import type { Page, Frame } from './browser-engine.js';
 import type { BrowserManager, ScreencastFrame } from './browser.js';
 import type {
   Command,

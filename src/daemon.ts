@@ -203,7 +203,7 @@ export async function startDaemon(options?: { streamPort?: number }): Promise<vo
             await browser.launch({
               id: 'auto',
               action: 'launch',
-              headless: process.env.AGENT_BROWSER_HEADED !== '1',
+              // headless option is ignored - always uses headed mode for better compatibility
               executablePath: process.env.AGENT_BROWSER_EXECUTABLE_PATH,
               extensions: extensions,
               channel: process.env.AGENT_BROWSER_CHANNEL,

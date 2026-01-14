@@ -793,9 +793,13 @@ export class BrowserManager {
       this.isPersistentContext = true;
     } else {
       // Regular mode: use launchPersistentContext for state persistence
+      // Force headed mode to maintain consistent browser fingerprint
+      // and avoid Google/OAuth blocking automation detection
+      // Allow headless in test mode (NODE_ENV=test) for CI/CD
+      const forceHeaded = process.env.NODE_ENV !== 'test';
       context = await launchWithRetry(() =>
         launcher.launchPersistentContext(userDataDir, {
-          headless: options.headless ?? true,
+          headless: forceHeaded ? false : (options.headless ?? true),
           executablePath: executablePath,
           channel: executablePath ? undefined : effectiveChannel,
           viewport,

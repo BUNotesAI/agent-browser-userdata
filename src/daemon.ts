@@ -197,6 +197,9 @@ export async function startDaemon(options?: { streamPort?: number }): Promise<vo
                   .map((p) => p.trim())
                   .filter(Boolean)
               : undefined;
+            const navigationDelay = process.env.AGENT_BROWSER_NAV_DELAY_MS
+              ? parseInt(process.env.AGENT_BROWSER_NAV_DELAY_MS, 10)
+              : undefined;
             await browser.launch({
               id: 'auto',
               action: 'launch',
@@ -204,6 +207,7 @@ export async function startDaemon(options?: { streamPort?: number }): Promise<vo
               executablePath: process.env.AGENT_BROWSER_EXECUTABLE_PATH,
               extensions: extensions,
               channel: process.env.AGENT_BROWSER_CHANNEL,
+              navigationDelay: navigationDelay,
             });
           }
 

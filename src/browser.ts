@@ -90,11 +90,22 @@ export class BrowserManager {
   private frameCallback: ((frame: ScreencastFrame) => void) | null = null;
   private screencastFrameHandler: ((params: any) => void) | null = null;
 
+  // Rate limiting: delay before each navigation (in ms)
+  // Default 10 seconds to be server-friendly during testing
+  private navigationDelay: number = 10000;
+
   /**
    * Check if browser is launched
    */
   isLaunched(): boolean {
     return this.browser !== null || this.isPersistentContext || this.persistentContext !== null;
+  }
+
+  /**
+   * Get the navigation delay (rate limiting)
+   */
+  getNavigationDelay(): number {
+    return this.navigationDelay;
   }
 
   /**
@@ -661,6 +672,9 @@ export class BrowserManager {
     if (hasExtensions && cdpPort) {
       throw new Error('Extensions cannot be used with CDP connection');
     }
+
+    // Store navigation delay for rate limiting (default 10s to be server-friendly)
+    this.navigationDelay = options.navigationDelay ?? 10000;
 
     if (this.isLaunched()) {
       const needsRelaunch =

@@ -18,6 +18,8 @@ export interface LaunchCommand extends BaseCommand {
   extensions?: string[];
   userDataDir?: string;
   channel?: string;
+  /** Delay in milliseconds before each navigation (rate limiting) */
+  navigationDelay?: number;
 }
 
 export interface NavigateCommand extends BaseCommand {

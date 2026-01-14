@@ -453,6 +453,12 @@ async function handleNavigate(
 ): Promise<Response<NavigateData>> {
   const page = browser.getPage();
 
+  // Rate limiting: delay before navigation to be server-friendly
+  const navigationDelay = browser.getNavigationDelay();
+  if (navigationDelay > 0) {
+    await new Promise((resolve) => setTimeout(resolve, navigationDelay));
+  }
+
   // If headers are provided, set up scoped headers for this origin
   if (command.headers && Object.keys(command.headers).length > 0) {
     await browser.setScopedHeaders(command.url, command.headers);

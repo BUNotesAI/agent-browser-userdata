@@ -885,12 +885,20 @@ export class BrowserManager {
       this.resetState();
     });
 
-    // Close any existing pages from previous sessions and create a fresh one
+    // Reuse existing page or create a new one
+    // This avoids the "flash" effect of closing and reopening windows
     const existingPages = context.pages();
-    for (const p of existingPages) {
-      await p.close().catch(() => {});
+    let page: Page;
+    if (existingPages.length > 0) {
+      // Reuse the first existing page, close extras
+      page = existingPages[0];
+      for (let i = 1; i < existingPages.length; i++) {
+        await existingPages[i].close().catch(() => {});
+      }
+    } else {
+      // No existing pages, create a new one
+      page = await context.newPage();
     }
-    const page = await context.newPage();
     this.pages = [page];
     this.activePageIndex = 0;
     this.setupPageTracking(page);

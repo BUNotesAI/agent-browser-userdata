@@ -13,6 +13,35 @@ const isWindows = process.platform === 'win32';
 // Session support - each session gets its own socket/pid
 let currentSession = process.env.AGENT_BROWSER_SESSION || 'default';
 
+/**
+ * Get the base directory for socket/pid files.
+ * Priority: AGENT_BROWSER_SOCKET_DIR > XDG_RUNTIME_DIR > ~/.agent-browser > tmpdir
+ *
+ * Using ~/.agent-browser instead of /tmp solves:
+ * - User isolation (different users don't share sockets)
+ * - TMPDIR inconsistency (tmux/screen/VSCode may use different TMPDIR)
+ */
+export function getSocketDir(): string {
+  // 1. Explicit override
+  if (process.env.AGENT_BROWSER_SOCKET_DIR) {
+    return process.env.AGENT_BROWSER_SOCKET_DIR;
+  }
+
+  // 2. XDG_RUNTIME_DIR (Linux standard)
+  if (process.env.XDG_RUNTIME_DIR) {
+    return path.join(process.env.XDG_RUNTIME_DIR, 'agent-browser');
+  }
+
+  // 3. Home directory fallback
+  const homeDir = os.homedir();
+  if (homeDir) {
+    return path.join(homeDir, '.agent-browser');
+  }
+
+  // 4. Last resort: temp dir
+  return path.join(os.tmpdir(), 'agent-browser');
+}
+
 // Stream server for browser preview
 let streamServer: StreamServer | null = null;
 
@@ -55,7 +84,7 @@ export function getSocketPath(session?: string): string {
   if (isWindows) {
     return String(getPortForSession(sess));
   }
-  return path.join(os.tmpdir(), `agent-browser-${sess}.sock`);
+  return path.join(getSocketDir(), `${sess}.sock`);
 }
 
 /**
@@ -63,7 +92,7 @@ export function getSocketPath(session?: string): string {
  */
 export function getPortFile(session?: string): string {
   const sess = session ?? currentSession;
-  return path.join(os.tmpdir(), `agent-browser-${sess}.port`);
+  return path.join(getSocketDir(), `${sess}.port`);
 }
 
 /**
@@ -71,7 +100,7 @@ export function getPortFile(session?: string): string {
  */
 export function getPidFile(session?: string): string {
   const sess = session ?? currentSession;
-  return path.join(os.tmpdir(), `agent-browser-${sess}.pid`);
+  return path.join(getSocketDir(), `${sess}.pid`);
 }
 
 /**
@@ -104,7 +133,7 @@ export function getConnectionInfo(
   if (isWindows) {
     return { type: 'tcp', port: getPortForSession(sess) };
   }
-  return { type: 'unix', path: path.join(os.tmpdir(), `agent-browser-${sess}.sock`) };
+  return { type: 'unix', path: path.join(getSocketDir(), `${sess}.sock`) };
 }
 
 /**
@@ -133,7 +162,7 @@ export function cleanupSocket(session?: string): void {
  */
 export function getStreamPortFile(session?: string): string {
   const sess = session ?? currentSession;
-  return path.join(os.tmpdir(), `agent-browser-${sess}.stream`);
+  return path.join(getSocketDir(), `${sess}.stream`);
 }
 
 /**
@@ -141,6 +170,12 @@ export function getStreamPortFile(session?: string): string {
  * @param options.streamPort Port for WebSocket stream server (0 to disable)
  */
 export async function startDaemon(options?: { streamPort?: number }): Promise<void> {
+  // Ensure socket directory exists
+  const socketDir = getSocketDir();
+  if (!fs.existsSync(socketDir)) {
+    fs.mkdirSync(socketDir, { recursive: true });
+  }
+
   // Clean up any stale socket
   cleanupSocket();
 
@@ -165,9 +200,21 @@ export async function startDaemon(options?: { streamPort?: number }): Promise<vo
 
   const server = net.createServer((socket) => {
     let buffer = '';
+    let httpChecked = false;
 
     socket.on('data', async (data) => {
       buffer += data.toString();
+
+      // Security: Detect and reject HTTP requests to prevent cross-origin attacks
+      // Browsers can be tricked into connecting to local sockets via malicious pages
+      if (!httpChecked) {
+        httpChecked = true;
+        const trimmed = buffer.trimStart();
+        if (/^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|CONNECT|TRACE)\s/i.test(trimmed)) {
+          socket.destroy();
+          return;
+        }
+      }
 
       // Process complete lines
       while (buffer.includes('\n')) {

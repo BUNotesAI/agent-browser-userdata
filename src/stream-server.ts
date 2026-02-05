@@ -87,7 +87,26 @@ export class StreamServer {
   start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        this.wss = new WebSocketServer({ port: this.port });
+        this.wss = new WebSocketServer({
+          port: this.port,
+          // Security: Reject cross-origin WebSocket connections from browsers
+          // Browser-based WebSocket connections always include an origin header
+          // CLI tools and other non-browser clients don't include origin
+          verifyClient: (info: {
+            origin: string;
+            secure: boolean;
+            req: import('http').IncomingMessage;
+          }) => {
+            const origin = info.origin;
+            // Allow connections without origin (non-browser clients like CLI)
+            // Reject connections from web pages (they always have origin)
+            if (origin && !origin.startsWith('file://')) {
+              console.log(`[StreamServer] Rejected connection from origin: ${origin}`);
+              return false;
+            }
+            return true;
+          },
+        });
 
         this.wss.on('connection', (ws) => {
           this.handleConnection(ws);

@@ -12,6 +12,36 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
+/// Get the base directory for socket/pid files.
+/// Priority: AGENT_BROWSER_SOCKET_DIR > XDG_RUNTIME_DIR > ~/.agent-browser > tmpdir
+///
+/// Using ~/.agent-browser instead of /tmp solves:
+/// - User isolation (different users don't share sockets)
+/// - TMPDIR inconsistency (tmux/screen/VSCode may use different TMPDIR)
+pub fn get_socket_dir() -> PathBuf {
+    // 1. Explicit override
+    if let Ok(dir) = env::var("AGENT_BROWSER_SOCKET_DIR") {
+        if !dir.is_empty() {
+            return PathBuf::from(dir);
+        }
+    }
+
+    // 2. XDG_RUNTIME_DIR (Linux standard)
+    if let Ok(runtime_dir) = env::var("XDG_RUNTIME_DIR") {
+        if !runtime_dir.is_empty() {
+            return PathBuf::from(runtime_dir).join("agent-browser");
+        }
+    }
+
+    // 3. Home directory fallback
+    if let Some(home) = dirs::home_dir() {
+        return home.join(".agent-browser");
+    }
+
+    // 4. Last resort: temp dir
+    env::temp_dir().join("agent-browser")
+}
+
 #[derive(Serialize)]
 #[allow(dead_code)]
 pub struct Request {
@@ -83,19 +113,16 @@ impl Connection {
 
 #[cfg(unix)]
 fn get_socket_path(session: &str) -> PathBuf {
-    let tmp = env::temp_dir();
-    tmp.join(format!("agent-browser-{}.sock", session))
+    get_socket_dir().join(format!("{}.sock", session))
 }
 
 fn get_pid_path(session: &str) -> PathBuf {
-    let tmp = env::temp_dir();
-    tmp.join(format!("agent-browser-{}.pid", session))
+    get_socket_dir().join(format!("{}.pid", session))
 }
 
 #[cfg(windows)]
 fn get_port_path(session: &str) -> PathBuf {
-    let tmp = env::temp_dir();
-    tmp.join(format!("agent-browser-{}.port", session))
+    get_socket_dir().join(format!("{}.port", session))
 }
 
 #[cfg(windows)]
@@ -181,6 +208,13 @@ pub fn ensure_daemon(
         return Ok(DaemonResult {
             already_running: true,
         });
+    }
+
+    // Ensure socket directory exists
+    let socket_dir = get_socket_dir();
+    if !socket_dir.exists() {
+        fs::create_dir_all(&socket_dir)
+            .map_err(|e| format!("Failed to create socket directory: {}", e))?;
     }
 
     let exe_path = env::current_exe().map_err(|e| e.to_string())?;
